@@ -1,6 +1,6 @@
-# Open RotMG Discord Bot
+<h1><img src="readme-icon.png" width="44" height="44" align="absmiddle" alt=""> Open RotMG / Discord Bot</h1>
 
-Chat levels and `/level` for the Open RotMG Discord server. Uses Ziva's 10 XP per message, five-second cooldown, OSRS level curve (1–99), level-up message and private paginated leaderboard.
+Chat levels and leaderboards for the Open RotMG Discord server. Earn XP by chatting, and use `/level` to see your level and the leaderboard.
 
 ## Run
 
