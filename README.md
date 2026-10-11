@@ -9,6 +9,7 @@ Requires Node.js 22.13 or newer.
 ```sh
 npm ci
 npm test
+DISCORD_APPLICATION_ID=1558885888400818247 \
 DISCORD_GUILD_ID=1558662335076376578 \
 DISCORD_BOT_TOKEN_FILE=/secure/path/token \
 DATABASE_PATH=/absolute/path/levels.sqlite npm start
