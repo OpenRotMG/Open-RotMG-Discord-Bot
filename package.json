@@ -1,0 +1,17 @@
+{
+  "name": "open-rotmg-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=22.13.0 <23"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "discord.js": "14.27.0"
+  }
+}

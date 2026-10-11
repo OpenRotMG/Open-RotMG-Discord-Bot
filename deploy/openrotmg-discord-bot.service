@@ -1,0 +1,41 @@
+[Unit]
+Description=Open RotMG Discord bot
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=openrotmg-discord-bot
+Group=openrotmg-discord-bot
+WorkingDirectory=/opt/openrotmg-discord-bot
+ExecStart=/usr/bin/node --max-old-space-size=128 src/index.js
+LoadCredential=discord-token:/etc/openrotmg-discord-bot/token
+Environment=DISCORD_BOT_TOKEN_FILE=%d/discord-token
+Environment=DISCORD_GUILD_ID=1558662335076376578
+Environment=DATABASE_PATH=/var/lib/openrotmg-discord-bot/levels.sqlite
+StateDirectory=openrotmg-discord-bot
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=15
+MemoryHigh=192M
+MemoryMax=256M
+CPUQuota=20%
+TasksMax=64
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+InaccessiblePaths=/var/lib/openrotmg /etc/openrotmg
+
+[Install]
+WantedBy=multi-user.target
