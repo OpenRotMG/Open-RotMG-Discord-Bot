@@ -1,5 +1,5 @@
 import { buildLevel, jumpModal } from './levels.js';
-import { COMMANDS, formatUptime } from './commands.js';
+import { ACCOUNT_STUBS, COMMANDS, formatUptime } from './commands.js';
 
 export async function handleMessage(message, {store, guildId, now = Date.now}) {
   if (message.guildId !== guildId || message.author.bot || message.webhookId) return;
@@ -30,6 +30,8 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
       await interaction.reply({content: COMMANDS.map(command => `**/${command.name}**: ${command.description}`).join('\n'), flags: 64});
     } else if (interaction.commandName === 'level') {
       await interaction.reply({...buildLevel(store, guildId, userId), flags: 64});
+    } else if (Object.hasOwn(ACCOUNT_STUBS, interaction.commandName)) {
+      await interaction.reply({content: ACCOUNT_STUBS[interaction.commandName], flags: 64});
     } else if (['uptime', 'players'].includes(interaction.commandName)) {
       await interaction.deferReply({flags: 64});
       const status = await gameStatus();

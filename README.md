@@ -2,6 +2,8 @@
 
 Chat levels and game status for the Open RotMG Discord server. `/help` lists commands, `/level` shows your level and leaderboard, `/uptime` shows game server uptime, and `/players` separates online players from game bots. Replies are private.
 
+`/link`, `/kick` and `/recover` are unavailable stubs pending registered-account authentication and linking. They do not link, disconnect or change any account. `/kick` is reserved for disconnecting your own linked account, not moderation.
+
 ## Run
 
 ```sh

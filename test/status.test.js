@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { COMMANDS, formatUptime } from '../src/commands.js';
+import { ACCOUNT_STUBS, COMMANDS, formatUptime } from '../src/commands.js';
 import { statusUrl, readGameStatus } from '../src/status.js';
 import { handleInteraction, replyInteractionError } from '../src/bot.js';
 
@@ -18,7 +18,7 @@ function command(name, extra = {}) {
 }
 
 test('help and registration share the exact complete command list', async () => {
-  assert.deepEqual(COMMANDS.map(c => c.name), ['help', 'level', 'uptime', 'players']);
+  assert.deepEqual(COMMANDS.map(c => c.name), ['help', 'level', 'uptime', 'players', 'link', 'kick', 'recover']);
   assert.equal(new Set(COMMANDS.map(c => c.name)).size, COMMANDS.length);
   for (const c of COMMANDS) {
     assert.equal(c.type, 1);
@@ -29,6 +29,27 @@ test('help and registration share the exact complete command list', async () => 
   assert.equal(help.events[0][1].flags, 64);
   for (const c of COMMANDS) assert.ok(help.events[0][1].content.includes(`**/${c.name}**: ${c.description}`));
   await assert.rejects(handleInteraction(command('unknown'), {guildId}), /Unknown command/);
+});
+
+test('account stubs are private, explicitly unavailable and never access account, XP or game services', async () => {
+  assert.deepEqual(Object.keys(ACCOUNT_STUBS), ['link', 'kick', 'recover']);
+  const store = new Proxy({}, {get() {throw Error('Stub accessed the XP database');}});
+  const gameStatus = () => {throw Error('Stub contacted the game');};
+  for (const [name, content] of Object.entries(ACCOUNT_STUBS)) {
+    const registered = COMMANDS.find(c => c.name === name);
+    assert.match(registered.description, /not available yet/);
+    assert.equal(registered.options, undefined);
+    assert.match(content, /isn't implemented yet/);
+    assert.match(content, /This command has not/);
+    const interaction = command(name);
+    await handleInteraction(interaction, {guildId, store, gameStatus});
+    assert.deepEqual(interaction.events, [['reply', {content, flags: 64}]]);
+    const foreign = command(name, {guildId: 'other'});
+    await handleInteraction(foreign, {guildId, store, gameStatus});
+    assert.deepEqual(foreign.events, [['reply', {content: 'This bot is configured for the Open RotMG server only.', flags: 64}]]);
+  }
+  assert.match(ACCOUNT_STUBS.kick, /your own linked account/);
+  await assert.rejects(handleInteraction(command('constructor'), {guildId, store, gameStatus}), /Unknown command/);
 });
 
 test('uptime formatting covers zero, boundaries and multi-day process uptime', () => {
