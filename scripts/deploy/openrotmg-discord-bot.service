@@ -15,6 +15,9 @@ LoadCredential=discord-token:/etc/openrotmg-discord-bot/token
 Environment=DISCORD_BOT_TOKEN_FILE=%d/discord-token
 Environment=DISCORD_APPLICATION_ID=1558885888400818247
 Environment=DISCORD_GUILD_ID=1558662335076376578
+Environment=ANNOUNCEMENTS_CHANNEL_ID=1558662517037990029
+Environment=UPDATE_BLOG_CHANNEL_ID=1559046091805171732
+Environment=AMULET_EMOJI_ID=1558672358464688178
 Environment=GAME_STATUS_URL=https://openrotmg.org/health
 Environment=DATABASE_PATH=/var/lib/openrotmg-discord-bot/levels.sqlite
 StateDirectory=openrotmg-discord-bot

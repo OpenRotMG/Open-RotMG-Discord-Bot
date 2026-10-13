@@ -1,6 +1,6 @@
 <h1><img src=".github/readme-icon.png" width="44" height="44" align="absmiddle" alt=""> Open RotMG / Discord Bot</h1>
 
-Chat levels, leaderboards and game-server status for the Open RotMG Discord server.
+Chat levels, leaderboards, game-server status and amulet reactions to announcements and update posts.
 
 ## Run locally
 

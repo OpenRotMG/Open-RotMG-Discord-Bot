@@ -5,6 +5,7 @@ import { openStore } from './store.js';
 import { handleMessage, handleInteraction, replyInteractionError } from './bot.js';
 import { COMMANDS } from './commands.js';
 import { statusUrl, readGameStatus } from './status.js';
+import { reactionConfig, postReactor } from './reactions.js';
 
 process.umask(0o077);
 const {DISCORD_APPLICATION_ID: applicationId, DISCORD_GUILD_ID: guildId, DISCORD_BOT_TOKEN_FILE: tokenFile, DATABASE_PATH: databasePath} = process.env;
@@ -15,6 +16,7 @@ if (!databasePath || !isAbsolute(databasePath)) throw new Error('DATABASE_PATH m
 const token = readFileSync(tokenFile, 'utf8').trim();
 if (!token) throw new Error('Bot token file is empty');
 const gameStatusUrl = statusUrl(process.env.GAME_STATUS_URL);
+const reactions = reactionConfig(process.env);
 const store = openStore(databasePath);
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]});
 const context = {store, guildId, gameStatus: async () => {
@@ -23,6 +25,7 @@ const context = {store, guildId, gameStatus: async () => {
   return status;
 }};
 let enabled = false;
+let react;
 function log(event, fields = {}) {
   console.log(JSON.stringify({time: new Date().toISOString(), event, ...fields}));
 }
@@ -32,6 +35,7 @@ function error(event, err, fields = {}) {
 client.on(Events.MessageCreate, message => {
   if (!enabled) return;
   handleMessage(message, context).catch(err => error('message_failed', err, {guildId: message.guildId, messageId: message.id, userId: message.author.id}));
+  react(message).catch(err => error('reaction_failed', err, {channelId: message.channelId, messageId: message.id}));
 });
 client.on(Events.InteractionCreate, interaction => {
   if (!enabled) return;
@@ -52,6 +56,7 @@ try {
   await ready;
   if (client.user.id !== applicationId) throw new Error('Bot token belongs to a different application');
   if (!client.guilds.cache.has(guildId)) throw new Error(`Bot is not installed in configured guild ${guildId}`);
+  react = await postReactor(client.rest, reactions, log);
   await client.rest.put(Routes.applicationGuildCommands(client.user.id, guildId), {
     body: COMMANDS,
   });
@@ -61,7 +66,7 @@ try {
 }
 clearTimeout(startupDeadline);
 enabled = true;
-log('ready', {botId: client.user.id, guildId});
+log('ready', {botId: client.user.id, guildId, reactionChannelIds: reactions.channelIds, reactionEmojiId: reactions.emojiId});
 const heartbeat = setInterval(() => log('heartbeat', {guildId, gatewayStatus: client.ws.status}), 60000);
 function stop(signal) {
   log('stopping', {signal}); clearInterval(heartbeat); client.destroy(); store.close();
