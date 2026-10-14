@@ -20,9 +20,21 @@ export function boardMessage(players, category, site) {
   let previous, rank = 0;
   const lines = sorted.map((p, i) => {
     if (previous !== p[category.metric]) rank = i + 1; previous = p[category.metric];
-    return `**${rank}.** ${p.name}${p.discord_id ? ` · <@${p.discord_id}>` : ''} — **${p[category.metric].toLocaleString('en-US')}**`;
+    return `**${rank}.** ${p.name}${p.discord_id ? ` · <@${p.discord_id}>` : ''} - **${p[category.metric].toLocaleString('en-US')}**`;
   });
   return {embeds: [{title: `${category.title} · Top 10`, description: `${category.rule}\n\n${lines.length ? lines.join('\n') : 'No ranked players yet. Sign into a registered game account to enter.'}\n\n${site}hiscores/?board=${category.metric}`, color: 0xd9b64a, footer: {text: marker}}], allowed_mentions: {parse: []}};
+}
+export function boardOverwrites(parent, guildId, botId) {
+  const blocked = PermissionFlagsBits.SendMessages | PermissionFlagsBits.SendMessagesInThreads | PermissionFlagsBits.CreatePublicThreads | PermissionFlagsBits.CreatePrivateThreads;
+  const allowed = PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages | PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.EmbedLinks;
+  // Explicit channel overrides must not discard the category's read restrictions.
+  const rules = parent.permission_overwrites.map(o => ({...o, allow: (BigInt(o.allow) & ~blocked).toString(), deny: (BigInt(o.deny) | blocked).toString()}));
+  for (const [id, type] of [[guildId, 0], [botId, 1]]) {
+    if (!rules.some(o => o.id === id)) rules.push({id, type, allow: '0', deny: blocked.toString()});
+  }
+  const bot = rules.find(o => o.id === botId);
+  bot.allow = (BigInt(bot.allow) | allowed).toString();bot.deny = (BigInt(bot.deny) & ~allowed).toString();
+  return rules;
 }
 export async function setupBoards(rest, {guildId, categoryId, botId, site, create = false}) {
   if (!/^\d{17,20}$/.test(categoryId)) throw new Error('HISCORES_CATEGORY_ID must be a Discord category ID');
@@ -36,10 +48,7 @@ export async function setupBoards(rest, {guildId, categoryId, botId, site, creat
     let channel = matches[0];
     if (!channel) {
       if (!create) throw new Error(`Missing #${category.name}; run the explicit hiscores setup command`);
-      channel = await rest.post(Routes.guildChannels(guildId), {body: {name: category.name, type: ChannelType.GuildText, parent_id: categoryId, topic: category.rule, permission_overwrites: [
-        {id: guildId, type: 0, deny: PermissionFlagsBits.SendMessages.toString()},
-        {id: botId, type: 1, allow: (PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages | PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.EmbedLinks).toString()}
-      ]}});
+      channel = await rest.post(Routes.guildChannels(guildId), {body: {name: category.name, type: ChannelType.GuildText, parent_id: categoryId, topic: category.rule, permission_overwrites: boardOverwrites(parent, guildId, botId)}});
     }
     if (channel.type !== ChannelType.GuildText) throw new Error(`Expected #${category.name} to be a text channel`);
     const history = await rest.get(Routes.channelMessages(channel.id), {query: new URLSearchParams({limit: '100'})});

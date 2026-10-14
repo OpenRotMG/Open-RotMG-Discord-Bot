@@ -41,7 +41,7 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
       try {
         const result = await linkGame(code, userId);
         await interaction.editReply({content: `Linked to **${result.name}**. Your Discord identity will appear on the game hiscores.`, allowedMentions: {parse: []}});
-      } catch (error) { await interaction.editReply({content: `Link failed: ${error.message}`, allowedMentions: {parse: []}}); }
+      } catch (error) { await interaction.editReply({content: `Link could not be confirmed: ${error.message}. Use /discord in game to check whether this account is already linked.`, allowedMentions: {parse: []}}); }
     } else if (Object.hasOwn(ACCOUNT_STUBS, interaction.commandName)) {
       await interaction.reply({content: ACCOUNT_STUBS[interaction.commandName], flags: 64});
     } else if (['uptime', 'players'].includes(interaction.commandName)) {

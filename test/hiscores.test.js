@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {categories, boardMessage, validateScores, setupBoards, refreshBoards, gameJson} from '../src/hiscores.js';
+import {categories, boardMessage, boardOverwrites, validateScores, setupBoards, refreshBoards, gameJson} from '../src/hiscores.js';
 import {handleInteraction} from '../src/bot.js';
 const player = (account, value, discord_id = null) => ({account, name:`Guest${account}`, discord_id, base_fame:value, collection:value, total_fame:value});
 const scores = {updated_at:1,players:[player(3,10),player(2,10,'1558662335076376578'),player(1,20)]};
@@ -12,7 +12,7 @@ test('top ten has competition ties, stable account ordering, website link, no bu
   assert.match(message.embeds[0].description,/\*\*2\.\*\* Guest2.*<@1558662335076376578>/);
   assert.match(message.embeds[0].description,/\*\*2\.\*\* Guest3/);
   assert.match(message.embeds[0].description,/https:\/\/openrotmg.org\/hiscores\/\?board=base_fame/);
-  assert.equal((boardMessage(Array.from({length:20},(_,i)=>player(i+1,i)),categories[0],'https://openrotmg.org/').embeds[0].description.match(/—/g)??[]).length,10);
+  assert.equal((boardMessage(Array.from({length:20},(_,i)=>player(i+1,i)),categories[0],'https://openrotmg.org/').embeds[0].description.match(/ - \*\*/g)??[]).length,10);
 });
 test('invalid values and duplicate players fail before edits', () => {
   assert.equal(validateScores(scores),scores);
@@ -34,6 +34,13 @@ test('setup adopts only exact bot-marked messages; missing/duplicate channels fa
   const boards=await setupBoards(rest,config);assert.equal(boards.length,3);assert.equal(boards[0].messageId,'own');
   await assert.rejects(setupBoards({get:async()=>channels.slice(0,1)},config),/Missing #fame/);
   await assert.rejects(setupBoards({get:async()=>[...channels,channels[1]]},config),/Duplicate/);
+});
+test('read-only boards preserve category visibility instead of widening private access', () => {
+  const rules = boardOverwrites({permission_overwrites:[{id:'guild',type:0,allow:'2048',deny:'1024'},{id:'private-role',type:0,allow:'1024',deny:'0'}]},'guild','bot');
+  const everyone = rules.find(o=>o.id==='guild'), role=rules.find(o=>o.id==='private-role'), bot=rules.find(o=>o.id==='bot');
+  assert.equal(BigInt(everyone.deny)&1024n,1024n);assert.equal(BigInt(everyone.allow)&2048n,0n);
+  assert.equal(BigInt(role.allow)&1024n,1024n);assert.equal(BigInt(role.deny)&2048n,2048n);
+  assert.equal(BigInt(bot.allow)&3072n,3072n);assert.equal(BigInt(bot.deny)&3072n,0n);
 });
 test('private API never follows redirects, has deadline, no credentials for public scores',async()=>{
   const calls=[];const fetchImpl=async(url,opts)=>{calls.push(opts);return {ok:true,json:async()=>({name:'Owner'})};};
