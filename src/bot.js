@@ -1,5 +1,5 @@
 import { buildLevel, jumpModal } from './levels.js';
-import { ACCOUNT_STUBS, COMMANDS, formatUptime } from './commands.js';
+import { COMMANDS, formatUptime } from './commands.js';
 
 export async function handleMessage(message, {store, guildId, now = Date.now}) {
   if (message.guildId !== guildId || message.author.bot || message.webhookId) return;
@@ -19,7 +19,7 @@ export async function replyInteractionError(interaction) {
   else if (!interaction.replied) await interaction.reply({...payload, flags: 64});
 }
 
-export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame}) {
+export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, kickGame, recoverGame}) {
   if (interaction.guildId !== guildId) {
     await interaction.reply({content: 'This bot is configured for the Open RotMG server only.', flags: 64});
     return;
@@ -42,8 +42,24 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         const result = await linkGame(code, userId);
         await interaction.editReply({content: `Linked to **${result.name}**. Your Discord identity will appear on the game hiscores.`, allowedMentions: {parse: []}});
       } catch (error) { await interaction.editReply({content: `Link could not be confirmed: ${error.message}. Use /discord in game to check whether this account is already linked.`, allowedMentions: {parse: []}}); }
-    } else if (Object.hasOwn(ACCOUNT_STUBS, interaction.commandName)) {
-      await interaction.reply({content: ACCOUNT_STUBS[interaction.commandName], flags: 64});
+    } else if (['kick', 'recover'].includes(interaction.commandName)) {
+      const kick = interaction.commandName === 'kick';
+      if (kick ? !kickGame : !recoverGame) throw new Error('Game account API is not configured');
+      await interaction.deferReply({flags: 64});
+      try {
+        if (kick) {
+          const result = await kickGame(userId);
+          if (typeof result.disconnected !== 'boolean') throw new Error('Invalid disconnect response');
+          await interaction.editReply({content: result.disconnected ? 'Your linked game connection was disconnected after its state was saved.' : 'Your linked game account has no active connection.', allowedMentions: {parse: []}});
+        } else {
+          const result = await recoverGame(interaction.options.getString('code'), userId);
+          const url = new URL(result.url);
+          if (url.origin !== 'https://openrotmg.org' || url.pathname !== '/recover/' || url.search || !/^#[a-f0-9]{64}$/.test(url.hash) || url.username || url.password) throw new Error('Invalid reset response');
+          await interaction.editReply({content: `Reset your game password here within 15 minutes:\n${url.href}\nKeep this one-use link private. Requesting it does not change your password; completing it saves and disconnects any active game session. Discord recovery is now enabled. To revoke it, type /discord norecovery in game.`, flags: 4, allowedMentions: {parse: []}});
+        }
+      } catch (error) {
+        await interaction.editReply({content: `${kick ? 'Disconnect' : 'Recovery'} could not be confirmed: ${error.message}`, allowedMentions: {parse: []}});
+      }
     } else if (['uptime', 'players'].includes(interaction.commandName)) {
       await interaction.deferReply({flags: 64});
       const status = await gameStatus();

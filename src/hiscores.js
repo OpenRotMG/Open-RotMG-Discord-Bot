@@ -2,8 +2,8 @@ import {Routes, ChannelType, PermissionFlagsBits} from 'discord.js';
 
 export const categories = [
   {name: 'fame', metric: 'base_fame', title: 'Base fame', rule: 'Best single-character base fame per account, living or dead.'},
-  {name: 'collection', metric: 'collection', title: 'Collection', rule: 'Unique items personally picked up from enemy drops. No starter gear, trades or player-dropped items.'},
-  {name: 'total-fame', metric: 'total_fame', title: 'Total fame', rule: 'Lifetime fame credited from dead characters, before spending.'}
+  {name: 'collection', metric: 'collection', title: 'Collection', rule: 'Items personally picked up from enemy drops'},
+  {name: 'total-fame', metric: 'total_fame', title: 'Total fame', rule: 'Available account fame. Earned from dead characters and reduced when spent.'}
 ];
 const marker = 'Open RotMG hiscores';
 export function validateScores(data) {
@@ -74,8 +74,8 @@ export async function refreshBoards(rest, boards, data, site) {
     }
   }
 }
-export async function gameJson(url, {body, token, fetchImpl = fetch} = {}) {
-  const response = await fetchImpl(url, {method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(3000), headers: body ? {'content-type': 'application/json', authorization: `Bearer ${token}`} : {}, ...(body ? {body: JSON.stringify(body)} : {})});
+export async function gameJson(url, {body, token, fetchImpl = fetch, timeout = 3000} = {}) {
+  const response = await fetchImpl(url, {method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(timeout), headers: body ? {'content-type': 'application/json', authorization: `Bearer ${token}`} : {}, ...(body ? {body: JSON.stringify(body)} : {})});
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `Game API failed (${response.status})`);
   return data;

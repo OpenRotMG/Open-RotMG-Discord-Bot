@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { ACCOUNT_STUBS, COMMANDS, formatUptime } from '../src/commands.js';
+import { COMMANDS, formatUptime } from '../src/commands.js';
 import { statusUrl, readGameStatus } from '../src/status.js';
 import { handleInteraction, replyInteractionError } from '../src/bot.js';
 
@@ -31,25 +31,38 @@ test('help and registration share the exact complete command list', async () => 
   await assert.rejects(handleInteraction(command('unknown'), {guildId}), /Unknown command/);
 });
 
-test('account stubs are private, explicitly unavailable and never access account, XP or game services', async () => {
-  assert.deepEqual(Object.keys(ACCOUNT_STUBS), ['kick', 'recover']);
-  const store = new Proxy({}, {get() {throw Error('Stub accessed the XP database');}});
-  const gameStatus = () => {throw Error('Stub contacted the game');};
-  for (const [name, content] of Object.entries(ACCOUNT_STUBS)) {
-    const registered = COMMANDS.find(c => c.name === name);
-    assert.match(registered.description, /not available yet/);
-    assert.equal(registered.options, undefined);
-    assert.match(content, /isn't implemented yet/);
-    assert.match(content, /This command has not/);
-    const interaction = command(name);
-    await handleInteraction(interaction, {guildId, store, gameStatus});
-    assert.deepEqual(interaction.events, [['reply', {content, flags: 64}]]);
+test('self kick and opt-in recovery defer privately, use only caller identity and never access XP', async () => {
+  const store = new Proxy({}, {get() {throw Error('Account command accessed XP');}});
+  for (const name of ['kick', 'recover']) {
+    let called = false;
+    const interaction = command(name, {options: {getString: field => {assert.equal(field, 'code');return 'a'.repeat(32);}}});
+    const context = {guildId, store, kickGame: async id => {assert.equal(id, interaction.user.id);called = true;return {disconnected: true};},
+      recoverGame: async (code, id) => {assert.equal(code, 'a'.repeat(32));assert.equal(id, interaction.user.id);called = true;return {url: 'https://openrotmg.org/recover/#' + 'b'.repeat(64)};}};
+    await handleInteraction(interaction, context);
+    assert.ok(called);assert.equal(interaction.events[0][1].flags, 64);
+    assert.match(interaction.events[1][1].content, name === 'kick' ? /state was saved/ : /within 15 minutes/);
+    assert.deepEqual(interaction.events[1][1].allowedMentions, {parse: []});
+    if (name === 'recover') assert.equal(interaction.events[1][1].flags, 4);
     const foreign = command(name, {guildId: 'other'});
-    await handleInteraction(foreign, {guildId, store, gameStatus});
-    assert.deepEqual(foreign.events, [['reply', {content: 'This bot is configured for the Open RotMG server only.', flags: 64}]]);
+    called = false;await handleInteraction(foreign, context);
+    assert.equal(called, false);assert.equal(foreign.events[0][1].flags, 64);
   }
-  assert.match(ACCOUNT_STUBS.kick, /your own linked account/);
-  await assert.rejects(handleInteraction(command('constructor'), {guildId, store, gameStatus}), /Unknown command/);
+  await assert.rejects(handleInteraction(command('constructor'), {guildId, store}), /Unknown command/);
+});
+
+test('offline, failed saves and malformed or foreign reset URLs never fabricate success', async () => {
+  const offline = command('kick');
+  await handleInteraction(offline, {guildId, kickGame: async () => ({disconnected: false})});
+  assert.match(offline.events[1][1].content, /no active connection/);
+  const failed = command('kick');
+  await handleInteraction(failed, {guildId, kickGame: async () => {throw Error('save failed');}});
+  assert.match(failed.events[1][1].content, /could not be confirmed: save failed/);
+  for (const url of ['https://evil.example/recover/#' + 'a'.repeat(64), 'https://openrotmg.org/recover/?token=secret', 'https://openrotmg.org/#' + 'a'.repeat(64), undefined]) {
+    const interaction = command('recover', {options: {getString: () => null}});
+    await handleInteraction(interaction, {guildId, recoverGame: async () => ({url})});
+    assert.match(interaction.events[1][1].content, /could not be confirmed/);
+    assert.ok(!interaction.events[1][1].content.includes('evil.example'));
+  }
 });
 
 test('uptime formatting covers zero, boundaries and multi-day process uptime', () => {
