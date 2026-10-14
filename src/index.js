@@ -29,7 +29,10 @@ const gameOrigin = gameEndpoint.origin;
 const site = 'https://openrotmg.org/';
 const store = openStore(databasePath);
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]});
-const context = {store, guildId, linkGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/link`, {body: {code, discord_id}, token: linkToken}), gameStatus: async () => {
+const context = {store, guildId,
+  kickGame: discord_id => gameJson(`${gameOrigin}/internal/discord/kick`, {body: {discord_id}, token: linkToken, timeout: 20000}),
+  recoverGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/recover`, {body: {discord_id, ...(code ? {code} : {})}, token: linkToken}),
+  linkGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/link`, {body: {code, discord_id}, token: linkToken}), gameStatus: async () => {
   const status = await readGameStatus(gameStatusUrl);
   if (!status.online) log('game_status_down', status.reason);
   return status;
