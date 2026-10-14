@@ -6,6 +6,7 @@ import { handleMessage, handleInteraction, replyInteractionError } from './bot.j
 import { COMMANDS } from './commands.js';
 import { statusUrl, readGameStatus } from './status.js';
 import { reactionConfig, postReactor } from './reactions.js';
+import {gameJson, setupBoards, refreshBoards} from './hiscores.js';
 
 process.umask(0o077);
 const {DISCORD_APPLICATION_ID: applicationId, DISCORD_GUILD_ID: guildId, DISCORD_BOT_TOKEN_FILE: tokenFile, DATABASE_PATH: databasePath} = process.env;
@@ -17,20 +18,30 @@ const token = readFileSync(tokenFile, 'utf8').trim();
 if (!token) throw new Error('Bot token file is empty');
 const gameStatusUrl = statusUrl(process.env.GAME_STATUS_URL);
 const reactions = reactionConfig(process.env);
+const linkTokenFile = process.env.DISCORD_LINK_TOKEN_FILE;
+if (!linkTokenFile || !isAbsolute(linkTokenFile)) throw new Error('DISCORD_LINK_TOKEN_FILE must be an absolute path');
+const linkToken = readFileSync(linkTokenFile, 'utf8').trim();
+if (!/^[a-f0-9]{64}$/.test(linkToken)) throw new Error('Invalid private link API credential');
+if (!process.env.GAME_API_URL) throw new Error('GAME_API_URL is required');
+const gameEndpoint = new URL(process.env.GAME_API_URL);
+if (gameEndpoint.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(gameEndpoint.hostname) || !gameEndpoint.port || gameEndpoint.pathname !== '/' || gameEndpoint.username || gameEndpoint.password || gameEndpoint.search || gameEndpoint.hash) throw new Error('GAME_API_URL requires an explicit HTTP loopback origin');
+const gameOrigin = gameEndpoint.origin;
+const site = 'https://openrotmg.org/';
 const store = openStore(databasePath);
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]});
-const context = {store, guildId, gameStatus: async () => {
+const context = {store, guildId, linkGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/link`, {body: {code, discord_id}, token: linkToken}), gameStatus: async () => {
   const status = await readGameStatus(gameStatusUrl);
   if (!status.online) log('game_status_down', status.reason);
   return status;
 }};
 let enabled = false;
 let react;
+let boards;
 function log(event, fields = {}) {
   console.log(JSON.stringify({time: new Date().toISOString(), event, ...fields}));
 }
 function error(event, err, fields = {}) {
-  log(event, {...fields, error: {name: err.name, code: err.code, message: String(err.message).replaceAll(token, '[REDACTED]')}});
+  log(event, {...fields, error: {name: err.name, code: err.code, message: String(err.message).replaceAll(token, '[REDACTED]').replaceAll(linkToken, '[REDACTED]')}});
 }
 client.on(Events.MessageCreate, message => {
   if (!enabled) return;
@@ -57,6 +68,7 @@ try {
   if (client.user.id !== applicationId) throw new Error('Bot token belongs to a different application');
   if (!client.guilds.cache.has(guildId)) throw new Error(`Bot is not installed in configured guild ${guildId}`);
   react = await postReactor(client.rest, reactions, log);
+  boards = await setupBoards(client.rest, {guildId, categoryId: process.env.HISCORES_CATEGORY_ID, botId: client.user.id, site});
   await client.rest.put(Routes.applicationGuildCommands(client.user.id, guildId), {
     body: COMMANDS,
   });
@@ -67,9 +79,19 @@ try {
 clearTimeout(startupDeadline);
 enabled = true;
 log('ready', {botId: client.user.id, guildId, reactionChannelIds: reactions.channelIds, reactionEmojiId: reactions.emojiId});
+let refreshing = false;
+async function updateHiscores() {
+  if (refreshing) return;
+  refreshing = true;
+  try { await refreshBoards(client.rest, boards, await gameJson(`${gameOrigin}/api/hiscores`), site); }
+  catch (err) { error('hiscores_refresh_failed', err); }
+  finally { refreshing = false; }
+}
+await updateHiscores();
+const hiscoreTimer = setInterval(updateHiscores, 60000);
 const heartbeat = setInterval(() => log('heartbeat', {guildId, gatewayStatus: client.ws.status}), 60000);
 function stop(signal) {
-  log('stopping', {signal}); clearInterval(heartbeat); client.destroy(); store.close();
+  log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); client.destroy(); store.close();
 }
 process.once('SIGTERM', () => stop('SIGTERM'));
 process.once('SIGINT', () => stop('SIGINT'));
