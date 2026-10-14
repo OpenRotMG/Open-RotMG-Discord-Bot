@@ -19,7 +19,7 @@ export async function replyInteractionError(interaction) {
   else if (!interaction.replied) await interaction.reply({...payload, flags: 64});
 }
 
-export async function handleInteraction(interaction, {store, guildId, gameStatus}) {
+export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame}) {
   if (interaction.guildId !== guildId) {
     await interaction.reply({content: 'This bot is configured for the Open RotMG server only.', flags: 64});
     return;
@@ -30,6 +30,18 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
       await interaction.reply({content: COMMANDS.map(command => `**/${command.name}**: ${command.description}`).join('\n'), flags: 64});
     } else if (interaction.commandName === 'level') {
       await interaction.reply({...buildLevel(store, guildId, userId), flags: 64});
+    } else if (interaction.commandName === 'link') {
+      if (!linkGame) throw new Error('Game linking API is not configured');
+      const code = interaction.options.getString('code');
+      if (!code) {
+        await interaction.reply({content: 'Sign into your registered game account and type /discord in game. Then use /link code:<your private code> within five minutes. Linking shows your Discord identity on hiscores. Never send a password here.', flags: 64});
+        return;
+      }
+      await interaction.deferReply({flags: 64});
+      try {
+        const result = await linkGame(code, userId);
+        await interaction.editReply({content: `Linked to **${result.name}**. Your Discord identity will appear on the game hiscores.`, allowedMentions: {parse: []}});
+      } catch (error) { await interaction.editReply({content: `Link could not be confirmed: ${error.message}. Use /discord in game to check whether this account is already linked.`, allowedMentions: {parse: []}}); }
     } else if (Object.hasOwn(ACCOUNT_STUBS, interaction.commandName)) {
       await interaction.reply({content: ACCOUNT_STUBS[interaction.commandName], flags: 64});
     } else if (['uptime', 'players'].includes(interaction.commandName)) {

@@ -13,6 +13,10 @@ WorkingDirectory=/opt/openrotmg-discord-bot
 ExecStart=/usr/bin/node --max-old-space-size=128 src/index.js
 LoadCredential=discord-token:/etc/openrotmg-discord-bot/token
 Environment=DISCORD_BOT_TOKEN_FILE=%d/discord-token
+LoadCredential=discord-link-token:/etc/openrotmg/discord-link-token
+Environment=DISCORD_LINK_TOKEN_FILE=%d/discord-link-token
+Environment=GAME_API_URL=http://127.0.0.1:18923
+Environment=HISCORES_CATEGORY_ID=1559701388928483419
 Environment=DISCORD_APPLICATION_ID=1558885888400818247
 Environment=DISCORD_GUILD_ID=1558662335076376578
 Environment=ANNOUNCEMENTS_CHANNEL_ID=1558662517037990029

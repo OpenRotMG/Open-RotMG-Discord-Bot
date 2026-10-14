@@ -32,7 +32,7 @@ test('help and registration share the exact complete command list', async () => 
 });
 
 test('account stubs are private, explicitly unavailable and never access account, XP or game services', async () => {
-  assert.deepEqual(Object.keys(ACCOUNT_STUBS), ['link', 'kick', 'recover']);
+  assert.deepEqual(Object.keys(ACCOUNT_STUBS), ['kick', 'recover']);
   const store = new Proxy({}, {get() {throw Error('Stub accessed the XP database');}});
   const gameStatus = () => {throw Error('Stub contacted the game');};
   for (const [name, content] of Object.entries(ACCOUNT_STUBS)) {

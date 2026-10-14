@@ -14,9 +14,23 @@ Run tests with `npm install --package-lock=false && npm test`. To start on Windo
 
 `/help` lists commands, `/level` shows your level and leaderboard, `/uptime` shows game server uptime, and `/players` separates online players from game bots. Replies are private.
 
-`/link`, `/kick` and `/recover` are unavailable stubs pending registered-account authentication and linking. They do not link, disconnect or change any account. `/kick` is reserved for disconnecting your own linked account, not moderation.
+`/link` explains how to type `/discord` while signed into a registered game account, then privately redeems the five-minute one-use code. Replies are ephemeral and bind only the actual interaction user ID. No game password is requested. Conflicts never replace links. `/kick` and `/recover` remain unavailable; `/kick` is reserved for disconnecting your own account, not moderation.
 
 Game status uses read-only HTTP GET. The endpoint must return nonnegative integer `uptime_seconds`, `players` (humans) and `bots`. Unreachable, timed-out or failing servers display “down”; malformed responses and configuration errors are logged explicitly, not turned into zero counts.
+
+## Permanent game hiscores
+
+Set `HISCORES_CATEGORY_ID` to the `Hiscores` category in your own test server and `GAME_API_URL` to the game server's explicit HTTP loopback origin. Set `DISCORD_LINK_TOKEN_FILE` to the same private credential file configured for the game server; it is separate from the Discord token. The API grants only code redemption, not gameplay/database/password access.
+
+Run the explicit setup once:
+
+```sh
+node --env-file=.env scripts/setup-hiscores.js
+```
+
+It creates `#fame`, `#collection` and `#total-fame` under that category and one permanent bot-owned top-ten message in each. Creating channels requires Manage Channels; alternatively create those exact text channels yourself and grant the bot View Channel, Send Messages, Read Message History and Embed Links. No Administrator or privileged gateway intent is needed. Setup refuses duplicate names/managed messages. Routine startup never creates missing resources silently.
+
+Messages update once a minute only when scores or identities change. Each links to the full website board. There is no `/hiscores`, pagination button or interaction UI. Ties share rank; mentions do not ping. Failures leave the previous message intact and log `hiscores_refresh_failed`, rather than publishing invented zeros. The game server's `docs/hiscores.md` defines the metrics, eligibility and collection provenance.
 
 ## Post reactions
 
@@ -32,4 +46,4 @@ It paginates all history, obeys Discord rate limits, skips posts already reacted
 
 ## Hosting
 
-The systemd unit runs on the game VM as a separate user with a 256 MiB memory limit. Install the repository at `/opt/openrotmg-discord-bot`, run `npm install --omit=dev --package-lock=false`, and put the bot token in `/etc/openrotmg-discord-bot/token` (root-owned, mode 600). Use `scripts/deploy/openrotmg-discord-bot.service`. Inspect logs with `journalctl -u openrotmg-discord-bot`.
+The systemd unit runs on the game VM as a separate user with a 256 MiB memory limit. Install the repository at `/opt/openrotmg-discord-bot`, run `npm install --omit=dev --package-lock=false`, and put the bot token in `/etc/openrotmg-discord-bot/token` (root-owned, mode 600). Install a separately generated root-owned mode-600 link API credential at `/etc/openrotmg/discord-link-token`, shared with the game service only through systemd `LoadCredential`. Use `scripts/deploy/openrotmg-discord-bot.service`. Inspect logs with `journalctl -u openrotmg-discord-bot`.
