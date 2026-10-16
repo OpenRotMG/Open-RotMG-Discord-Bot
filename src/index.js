@@ -13,6 +13,8 @@ process.umask(0o077);
 const {DISCORD_APPLICATION_ID: applicationId, DISCORD_GUILD_ID: guildId, DISCORD_BOT_TOKEN_FILE: tokenFile, DATABASE_PATH: databasePath} = process.env;
 if (!/^\d{17,20}$/.test(applicationId)) throw new Error('DISCORD_APPLICATION_ID must be the expected bot application ID');
 if (!/^\d{17,20}$/.test(guildId)) throw new Error('DISCORD_GUILD_ID must be a Discord server ID');
+const announceRoleId = process.env.ANNOUNCE_ROLE_ID;
+if (!/^\d{17,20}$/.test(announceRoleId)) throw new Error('ANNOUNCE_ROLE_ID must be the announcer role ID');
 if (!tokenFile || !isAbsolute(tokenFile)) throw new Error('DISCORD_BOT_TOKEN_FILE must be an absolute path');
 if (!databasePath || !isAbsolute(databasePath)) throw new Error('DATABASE_PATH must be an absolute path');
 const token = readFileSync(tokenFile, 'utf8').trim();
@@ -31,7 +33,8 @@ const bugs = bugConfig(process.env, gameOrigin, linkToken);
 const site = 'https://openrotmg.org/';
 const store = openStore(databasePath);
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]});
-const context = {store, guildId,
+const context = {store, guildId, announceRoleId,
+  announceGame: text => gameJson(`${gameOrigin}/internal/discord/announce`, {body: {text}, token: linkToken, timeout: 20000}),
   kickGame: discord_id => gameJson(`${gameOrigin}/internal/discord/kick`, {body: {discord_id}, token: linkToken, timeout: 20000}),
   recoverGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/recover`, {body: {discord_id, ...(code ? {code} : {})}, token: linkToken}),
   linkGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/link`, {body: {code, discord_id}, token: linkToken}), gameStatus: async () => {

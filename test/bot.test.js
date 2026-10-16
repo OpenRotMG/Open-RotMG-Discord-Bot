@@ -151,6 +151,30 @@ test('slash, buttons, modal jump, invalid input, and foreign guild responses are
   } finally { store.close(); }
 });
 
+test('announcements require the announcer role and report the delivered count', async () => {
+  const store = openStore(':memory:');
+  const replies = [];
+  const edits = [];
+  const announceRoleId = '1558662875319500902';
+  const common = {reply: async value => replies.push(value), deferReply: async value => replies.push(value), editReply: async value => edits.push(value), options: {getString: () => 'Restarting soon'}};
+  const command = member => interaction({...common, isChatInputCommand: () => true, commandName: 'announce', member});
+  const announced = [];
+  const context = {store, guildId, announceRoleId, announceGame: async text => { announced.push(text); return {players: 2}; }};
+  try {
+    for (const member of [undefined, {}, {roles: {cache: new Set()}}, {roles: {cache: new Set(['1558662335076376579'])}}]) {
+      await handleInteraction(command(member), context);
+      assert.equal(replies.at(-1).flags, 64);
+      assert.match(replies.at(-1).content, /announcer role/);
+    }
+    assert.deepEqual(announced, []);
+    await handleInteraction(command({roles: {cache: new Set([announceRoleId])}}), context);
+    assert.deepEqual(announced, ['Restarting soon']);
+    assert.match(edits.at(-1).content, /2 online players/);
+    await handleInteraction(command({roles: {cache: new Set([announceRoleId])}}), {...context, announceGame: async () => { throw new Error('Announcements are limited to 200 characters.'); }});
+    assert.match(edits.at(-1).content, /was not delivered: Announcements are limited to 200 characters\./);
+  } finally { store.close(); }
+});
+
 test('notification failure is explicit, award persisted, replay does not ping again', async () => {
   const store = openStore(':memory:');
   try {
