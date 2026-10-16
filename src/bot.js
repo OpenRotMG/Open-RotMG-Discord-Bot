@@ -30,7 +30,7 @@ export async function replyInteractionError(interaction) {
   else if (!interaction.replied) await interaction.reply({...payload, flags: 64});
 }
 
-export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, kickGame, recoverGame}) {
+export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, kickGame, recoverGame, announceRoleId, announceGame}) {
   if (interaction.guildId !== guildId) {
     await interaction.reply({content: 'This bot is configured for the Open RotMG server only.', flags: 64});
     return;
@@ -70,6 +70,20 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         }
       } catch (error) {
         await interaction.editReply({content: `${kick ? 'Disconnect' : 'Recovery'} could not be confirmed: ${error.message}`, allowedMentions: {parse: []}});
+      }
+    } else if (interaction.commandName === 'announce') {
+      if (!interaction.member?.roles?.cache?.has(announceRoleId)) {
+        await interaction.reply({content: 'Announcing requires the announcer role.', flags: 64});
+        return;
+      }
+      if (!announceGame) throw new Error('Announcement API is not configured');
+      await interaction.deferReply({flags: 64});
+      try {
+        const result = await announceGame(interaction.options.getString('text'));
+        if (!Number.isSafeInteger(result.players)) throw new Error('Invalid announcement response');
+        await interaction.editReply({content: `Announced to ${result.players} online player${result.players === 1 ? '' : 's'}.`, allowedMentions: {parse: []}});
+      } catch (error) {
+        await interaction.editReply({content: `Announcement was not delivered: ${error.message}`, allowedMentions: {parse: []}});
       }
     } else if (['uptime', 'players'].includes(interaction.commandName)) {
       await interaction.deferReply({flags: 64});

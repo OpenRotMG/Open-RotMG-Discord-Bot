@@ -18,7 +18,7 @@ function command(name, extra = {}) {
 }
 
 test('help and registration share the exact complete command list', async () => {
-  assert.deepEqual(COMMANDS.map(c => c.name), ['help', 'level', 'uptime', 'players', 'link', 'kick', 'recover']);
+  assert.deepEqual(COMMANDS.map(c => c.name), ['help', 'level', 'uptime', 'players', 'link', 'announce', 'kick', 'recover']);
   assert.equal(new Set(COMMANDS.map(c => c.name)).size, COMMANDS.length);
   for (const c of COMMANDS) {
     assert.equal(c.type, 1);
@@ -29,6 +29,12 @@ test('help and registration share the exact complete command list', async () => 
   assert.equal(help.events[0][1].flags, 64);
   for (const c of COMMANDS) assert.ok(help.events[0][1].content.includes(`**/${c.name}**: ${c.description}`));
   await assert.rejects(handleInteraction(command('unknown'), {guildId}), /Unknown command/);
+});
+
+test('the announce command caps text at the same limit the game server enforces', () => {
+  const announce = COMMANDS.find(command => command.name === 'announce');
+  assert.equal(announce.options[0].required, true);
+  assert.equal(announce.options[0].max_length, 200);
 });
 
 test('self kick and opt-in recovery defer privately, use only caller identity and never access XP', async () => {
