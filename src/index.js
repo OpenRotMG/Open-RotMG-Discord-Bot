@@ -8,6 +8,7 @@ import { statusUrl, readGameStatus } from './status.js';
 import { reactionConfig, postReactor } from './reactions.js';
 import { bugConfig, bugPublisher, validateBugChannels } from './bugs.js';
 import {gameJson, setupBoards, refreshBoards} from './hiscores.js';
+import {syncUpdates} from './updates.js';
 
 process.umask(0o077);
 const {DISCORD_APPLICATION_ID: applicationId, DISCORD_GUILD_ID: guildId, DISCORD_BOT_TOKEN_FILE: tokenFile, DATABASE_PATH: databasePath} = process.env;
@@ -98,13 +99,25 @@ async function updateHiscores() {
 }
 await updateHiscores();
 const hiscoreTimer = setInterval(updateHiscores, 60000);
+let syncingUpdates = false;
+async function updateNews() {
+  if (syncingUpdates) return;
+  syncingUpdates = true;
+  try {
+    await syncUpdates({rest: client.rest, guildId, channelId: reactions.channelIds[1], log,
+      publish: body => gameJson(`${gameOrigin}/internal/discord/updates`, {body, token: linkToken, timeout: 10000})});
+  } catch (err) { error('updates_sync_failed', err, {channelId: reactions.channelIds[1]}); }
+  finally { syncingUpdates = false; }
+}
+await updateNews();
+const updateTimer = setInterval(updateNews, 60000);
 const publishBugs = bugs ? bugPublisher({rest: client.rest, botId: client.user.id, config: bugs, log}) : null;
 const bugTimer = publishBugs ? setInterval(publishBugs, 5000) : null;
 if (publishBugs) void publishBugs();
 else log('bug_reporting_disabled', {reason: 'BUG_REPORTING is not set'});
 const heartbeat = setInterval(() => log('heartbeat', {guildId, gatewayStatus: client.ws.status}), 60000);
 function stop(signal) {
-  log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); clearInterval(bugTimer); client.destroy(); store.close();
+  log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); clearInterval(updateTimer); clearInterval(bugTimer); client.destroy(); store.close();
 }
 process.once('SIGTERM', () => stop('SIGTERM'));
 process.once('SIGINT', () => stop('SIGINT'));
