@@ -151,7 +151,7 @@ test('slash, buttons, modal jump, invalid input, and foreign guild responses are
   } finally { store.close(); }
 });
 
-test('announcements require the announcer role and report the delivered count', async () => {
+test('announcements require the Moderator role and report the delivered count', async () => {
   const store = openStore(':memory:');
   const replies = [];
   const edits = [];
@@ -163,8 +163,7 @@ test('announcements require the announcer role and report the delivered count', 
   try {
     for (const member of [undefined, {}, {roles: {cache: new Set()}}, {roles: {cache: new Set(['1558662335076376579'])}}]) {
       await handleInteraction(command(member), context);
-      assert.equal(replies.at(-1).flags, 64);
-      assert.match(replies.at(-1).content, /announcer role/);
+      assert.deepEqual(replies.at(-1), {content: 'Announcing requires the Moderator role.', flags: 64});
     }
     assert.deepEqual(announced, []);
     await handleInteraction(command({roles: {cache: new Set([announceRoleId])}}), context);

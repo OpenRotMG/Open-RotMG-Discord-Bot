@@ -73,7 +73,7 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
       }
     } else if (interaction.commandName === 'announce') {
       if (!interaction.member?.roles?.cache?.has(announceRoleId)) {
-        await interaction.reply({content: 'Announcing requires the announcer role.', flags: 64});
+        await interaction.reply({content: 'Announcing requires the Moderator role.', flags: 64});
         return;
       }
       if (!announceGame) throw new Error('Announcement API is not configured');

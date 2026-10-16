@@ -15,7 +15,7 @@ const {DISCORD_APPLICATION_ID: applicationId, DISCORD_GUILD_ID: guildId, DISCORD
 if (!/^\d{17,20}$/.test(applicationId)) throw new Error('DISCORD_APPLICATION_ID must be the expected bot application ID');
 if (!/^\d{17,20}$/.test(guildId)) throw new Error('DISCORD_GUILD_ID must be a Discord server ID');
 const announceRoleId = process.env.ANNOUNCE_ROLE_ID;
-if (!/^\d{17,20}$/.test(announceRoleId)) throw new Error('ANNOUNCE_ROLE_ID must be the announcer role ID');
+if (!/^\d{17,20}$/.test(announceRoleId)) throw new Error('ANNOUNCE_ROLE_ID must be the Moderator role ID');
 if (!tokenFile || !isAbsolute(tokenFile)) throw new Error('DISCORD_BOT_TOKEN_FILE must be an absolute path');
 if (!databasePath || !isAbsolute(databasePath)) throw new Error('DATABASE_PATH must be an absolute path');
 const token = readFileSync(tokenFile, 'utf8').trim();
