@@ -12,6 +12,9 @@ Group=openrotmg-discord-bot
 WorkingDirectory=/opt/openrotmg-discord-bot
 ExecStart=/usr/bin/node --max-old-space-size=128 src/index.js
 LoadCredential=discord-token:/etc/openrotmg-discord-bot/token
+LoadCredential=bug-github-token:/etc/openrotmg-discord-bot/bug-github-token
+Environment=GITHUB_BUG_TOKEN_FILE=%d/bug-github-token
+Environment=BUG_REPORTING=1
 Environment=DISCORD_BOT_TOKEN_FILE=%d/discord-token
 LoadCredential=discord-link-token:/etc/openrotmg/discord-link-token
 Environment=DISCORD_LINK_TOKEN_FILE=%d/discord-link-token

@@ -6,6 +6,7 @@ import { handleMessage, handleInteraction, replyInteractionError } from './bot.j
 import { COMMANDS } from './commands.js';
 import { statusUrl, readGameStatus } from './status.js';
 import { reactionConfig, postReactor } from './reactions.js';
+import { bugConfig, bugPublisher, validateBugChannels } from './bugs.js';
 import {gameJson, setupBoards, refreshBoards} from './hiscores.js';
 
 process.umask(0o077);
@@ -26,9 +27,10 @@ if (!process.env.GAME_API_URL) throw new Error('GAME_API_URL is required');
 const gameEndpoint = new URL(process.env.GAME_API_URL);
 if (gameEndpoint.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(gameEndpoint.hostname) || !gameEndpoint.port || gameEndpoint.pathname !== '/' || gameEndpoint.username || gameEndpoint.password || gameEndpoint.search || gameEndpoint.hash) throw new Error('GAME_API_URL requires an explicit HTTP loopback origin');
 const gameOrigin = gameEndpoint.origin;
+const bugs = bugConfig(process.env, gameOrigin, linkToken);
 const site = 'https://openrotmg.org/';
 const store = openStore(databasePath);
-const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]});
+const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]});
 const context = {store, guildId,
   kickGame: discord_id => gameJson(`${gameOrigin}/internal/discord/kick`, {body: {discord_id}, token: linkToken, timeout: 20000}),
   recoverGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/recover`, {body: {discord_id, ...(code ? {code} : {})}, token: linkToken}),
@@ -71,6 +73,7 @@ try {
   if (client.user.id !== applicationId) throw new Error('Bot token belongs to a different application');
   if (!client.guilds.cache.has(guildId)) throw new Error(`Bot is not installed in configured guild ${guildId}`);
   react = await postReactor(client.rest, reactions, log);
+  if (bugs) await validateBugChannels(client, guildId);
   boards = await setupBoards(client.rest, {guildId, categoryId: process.env.HISCORES_CATEGORY_ID, botId: client.user.id, site});
   await client.rest.put(Routes.applicationGuildCommands(client.user.id, guildId), {
     body: COMMANDS,
@@ -92,9 +95,13 @@ async function updateHiscores() {
 }
 await updateHiscores();
 const hiscoreTimer = setInterval(updateHiscores, 60000);
+const publishBugs = bugs ? bugPublisher({rest: client.rest, botId: client.user.id, config: bugs, log}) : null;
+const bugTimer = publishBugs ? setInterval(publishBugs, 5000) : null;
+if (publishBugs) void publishBugs();
+else log('bug_reporting_disabled', {reason: 'BUG_REPORTING is not set'});
 const heartbeat = setInterval(() => log('heartbeat', {guildId, gatewayStatus: client.ws.status}), 60000);
 function stop(signal) {
-  log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); client.destroy(); store.close();
+  log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); clearInterval(bugTimer); client.destroy(); store.close();
 }
 process.once('SIGTERM', () => stop('SIGTERM'));
 process.once('SIGINT', () => stop('SIGINT'));

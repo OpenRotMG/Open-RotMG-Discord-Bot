@@ -1,8 +1,19 @@
 import { buildLevel, jumpModal } from './levels.js';
 import { COMMANDS, formatUptime } from './commands.js';
+import { BUG_REPLY } from './bugs.js';
+const bugReplies = new Map();
 
 export async function handleMessage(message, {store, guildId, now = Date.now}) {
   if (message.guildId !== guildId || message.author.bot || message.webhookId) return;
+  if (message.content?.trim() === '!bug') {
+    const time = now();
+    for (const [id, at] of bugReplies) if (time - at >= 30000) bugReplies.delete(id);
+    if (bugReplies.has(message.author.id) || bugReplies.size >= 4096) return;
+    bugReplies.set(message.author.id, time);
+    try { await message.reply({content: BUG_REPLY, allowedMentions: {parse: [], repliedUser: false}}); }
+    catch (error) { bugReplies.delete(message.author.id); throw error; }
+    return;
+  }
   const result = store.award(message, now());
   if (result?.leveledUp) {
     await message.channel.send({

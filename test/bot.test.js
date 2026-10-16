@@ -70,15 +70,16 @@ test('normal messages level exactly once, with the same message and only the aut
   } finally { store.close(); }
 });
 
-test('bots, webhooks, DMs, foreign guilds ignored; content never accessed', async () => {
+test('bots, webhooks, DMs, foreign guilds ignored before reading content', async () => {
   const store = openStore(':memory:');
   try {
     for (const extra of [{author: {id: '1', bot: true}}, {webhookId: '9'}, {guildId: null}, {guildId: 'other'}]) {
-      await handleMessage(message(1, '1', extra), {store, guildId});
+      const ignored = message(1, '1', extra);
+      Object.defineProperty(ignored, 'content', {get() { throw new Error('Filtered content accessed'); }});
+      await handleMessage(ignored, {store, guildId});
     }
     assert.equal(store.me(guildId, '1'), undefined);
-    const msg = message(2);
-    Object.defineProperty(msg, 'content', {get() { throw new Error('Message content accessed'); }});
+    const msg = message(2, '1', {content: 'ordinary message'});
     await handleMessage(msg, {store, guildId, now: () => 0});
     assert.equal(store.me(guildId, '1').xp, 10);
   } finally { store.close(); }
