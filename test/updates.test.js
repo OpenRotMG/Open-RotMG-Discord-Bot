@@ -14,26 +14,34 @@ function fixture(messages) {
 test('startup snapshot, edits, deletions and empty channels reconcile by message ID',async()=>{
   const messages=[message('34567890123456790'),message()];const {options,published,logs}=fixture(messages);
   await syncUpdates(options);
-  assert.deepEqual(published[0],{guild_id:guildId,channel_id:channelId,posts:messages.map(m=>({id:m.id,content:'A new update\n\nHeal & play together.',published_at:1792137600,edited_at:null}))});
+  assert.deepEqual(published[0],{guild_id:guildId,channel_id:channelId,posts:messages.map(m=>({id:m.id,content:'A new update\n\nHeal & play together.',attachments:[],published_at:1792137600,edited_at:null}))});
   messages[0].content='Edited headline';messages[0].edited_timestamp='2026-10-16T08:01:00.000Z';messages.pop();
   await syncUpdates(options);assert.equal(published[1].posts.length,1);assert.equal(published[1].posts[0].edited_at,1792137660);
   messages.length=0;await syncUpdates(options);assert.deepEqual(published[2].posts,[]);
   assert.equal(logs[2][0],'updates_synced');assert.equal(logs[2][1].posts,0);
 });
-test('safe plain text preserves paragraphs, links, literal HTML and attachment provenance',async()=>{
+test('safe plain text strips everyone and preserves paragraphs, links and attachments',async()=>{
   assert.equal(plainText('## Title\r\n\r\n**bold** and *italic* `code`\n[Site](https://example.org) <:amulet:123>'), 'Title\n\nbold and italic code\nSite (https://example.org) :amulet:');
   assert.equal(plainText('Title\n\n## Section\n\nBody'), 'Title\n\nSection\n\nBody');
-  const m=message();m.content='<script>alert(1)</script>\n\nSecond paragraph';m.attachments=[{filename:'demo.png'}];
+  assert.equal(plainText('@everyone ## Title\n\nBody @everyone here'), 'Title\n\nBody here');
+  const m=message();m.content='@everyone <script>alert(1)</script>\n\nSecond paragraph';
+  m.attachments=[{filename:'demo.mp4',url:'https://cdn.discordapp.com/attachments/23456789012345678/34567890123456789/demo.mp4?ex=abc&is=def&hm=123',content_type:'video/mp4'}];
   const {options,published}=fixture([m]);await syncUpdates(options);
-  assert.equal(published[0].posts[0].content,'<script>alert(1)</script>\n\nSecond paragraph\n\nAttachments on Discord: demo.png');
-  m.content='';const f=fixture([m]);await syncUpdates(f.options);assert.match(f.published[0].posts[0].content,/Attachments on Discord: demo.png/);
+  assert.equal(published[0].posts[0].content,'<script>alert(1)</script>\n\nSecond paragraph');
+  assert.deepEqual(published[0].posts[0].attachments,m.attachments);
+  m.content='';const f=fixture([m]);await syncUpdates(f.options);assert.equal(f.published[0].posts[0].content,'demo.mp4');
+  const renewed=fixture([{...m,attachments:[{...m.attachments[0],url:m.attachments[0].url.replace('ex=abc','ex=999')}]}]);
+  await syncUpdates(renewed.options);assert.match(renewed.published[0].posts[0].attachments[0].url,/ex=999/);
 });
 test('bad pages/messages never publish a partial snapshot',async()=>{
   for(const bad of [null,{},Array(101).fill(message()),[message(),message()],
     [{...message(),channel_id:guildId}],[{...message(),content:'a\0b'}],[{...message(),content:'a\uffffb'}],[{...message(),timestamp:'bad'}],
     [{...message(),edited_timestamp:'2020-01-01'}],[{...message(),content:'x'.repeat(8001)}],
+    [{...message(),attachments:[{filename:'demo.mp4',url:'https://example.org/demo.mp4'}]}],
+    [{...message(),attachments:[{filename:'demo.mp4',url:'javascript:alert(1)'}]}],
+    [{...message(),attachments:Array(11).fill({})}],
     [{...message(),content:'',embeds:[{title:'An embed'}]}]]) {
-    const f=fixture(bad);await assert.rejects(syncUpdates(f.options),/Invalid|only embeds/);assert.equal(f.published.length,0);
+    const f=fixture(bad);await assert.rejects(syncUpdates(f.options),/Invalid|only embeds|Too many/);assert.equal(f.published.length,0);
   }
 });
 test('system messages are skipped explicitly; Discord and game failures propagate for retry',async()=>{
