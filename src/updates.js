@@ -36,7 +36,7 @@ export async function syncUpdates({rest, guildId, channelId, publish, log}) {
     const edited_at = message.edited_timestamp === null ? null : Date.parse(message.edited_timestamp) / 1000;
     if (!Number.isFinite(published_at) || published_at < 1 || published_at > 2147483647
         || (edited_at !== null && (!Number.isFinite(edited_at) || edited_at < published_at || edited_at > 2147483647))
-        || content.length > 8000 || /[\x00-\x08\x0b-\x1f\x7f-\x9f]/.test(content)) throw new Error(`Invalid update content/timestamp: ${message.id}`);
+        || content.length > 8000 || /[\x00-\x08\x0b-\x1f\x7f-\x9f\ufffe\uffff]/.test(content)) throw new Error(`Invalid update content/timestamp: ${message.id}`);
     posts.push({id: message.id, content, published_at: Math.floor(published_at), edited_at: edited_at === null ? null : Math.floor(edited_at)});
   }
   const result = await publish({guild_id: guildId, channel_id: channelId, posts});

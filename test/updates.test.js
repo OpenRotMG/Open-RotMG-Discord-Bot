@@ -30,7 +30,7 @@ test('safe plain text preserves paragraphs, links, literal HTML and attachment p
 });
 test('bad pages/messages never publish a partial snapshot',async()=>{
   for(const bad of [null,{},Array(101).fill(message()),[message(),message()],
-    [{...message(),channel_id:guildId}],[{...message(),content:'a\0b'}],[{...message(),timestamp:'bad'}],
+    [{...message(),channel_id:guildId}],[{...message(),content:'a\0b'}],[{...message(),content:'a\uffffb'}],[{...message(),timestamp:'bad'}],
     [{...message(),edited_timestamp:'2020-01-01'}],[{...message(),content:'x'.repeat(8001)}],
     [{...message(),content:'',embeds:[{title:'An embed'}]}]]) {
     const f=fixture(bad);await assert.rejects(syncUpdates(f.options),/Invalid|only embeds/);assert.equal(f.published.length,0);
