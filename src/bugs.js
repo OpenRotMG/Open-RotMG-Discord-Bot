@@ -34,8 +34,14 @@ function issueUrl(number) {
   return `https://github.com/${repository}/issues/${number}`;
 }
 function text(value) { return escapeMarkdown(value).replaceAll('@', '@\u200b'); }
+function reporter(report) {
+  if (report.schema === 2) return 'not recorded (legacy report)';
+  const name = report.reporter_name;
+  if (typeof name !== 'string' || !name.trim() || name.length > 64 || /[\r\n]/.test(name)) throw new Error('Invalid bug reporter name');
+  return text(name);
+}
 export function bugIssue(report, gameOrigin) {
-  if (report.schema !== 2 || !/^[a-f0-9]{24}$/.test(report.id) || !Number.isSafeInteger(report.created_at_unix_ms)) throw new Error('Invalid bug report identity/schema');
+  if (![2, 3].includes(report.schema) || !/^[a-f0-9]{24}$/.test(report.id) || !Number.isSafeInteger(report.created_at_unix_ms)) throw new Error('Invalid bug report identity/schema');
   const title = bugTitle(report.message_untrusted);
   const diagnostics = `${gameOrigin}/api/bug-reports/${report.id}/diagnostics.json`;
   if (report.diagnostics_url !== diagnostics) throw new Error('Unexpected diagnostic attachment URL');
@@ -45,6 +51,7 @@ export function bugIssue(report, gameOrigin) {
   const description = report.message_untrusted.split(/\r?\n/).map(line => `> ${text(line)}`).join('\n');
   return {title, body: [
     `<!-- openrotmg-bug:${report.id} -->`, description, '',
+    `**Reporter:** ${reporter(report)}  `,
     `**Environment:** ${browser} on ${os}  `,
     `**Reported:** ${new Date(report.created_at_unix_ms).toISOString()}`, '',
     `Diagnostics: ${diagnostics}`
@@ -113,7 +120,7 @@ export function bugPublisher({rest, botId, config, log, request = fetch}) {
         stage = 'discord_notification';
         const url = issueUrl(report.delivery.issue_number);
         const message = await existingMessage(rest, botId, report, url) ?? await rest.post(Routes.channelMessages(PUBLIC_BUG_CHANNEL_ID), {
-          body: {content: `${text(report.message_untrusted)}\n${url}`, flags: MessageFlags.SuppressEmbeds, allowed_mentions: {parse: []}, nonce: `u${report.id}`, enforce_nonce: true}
+          body: {content: `Reporter: ${reporter(report)}\n${text(report.message_untrusted)}\n${url}`, flags: MessageFlags.SuppressEmbeds, allowed_mentions: {parse: []}, nonce: `u${report.id}`, enforce_nonce: true}
         });
         await acknowledge('public_message_id', message.id);
       }
