@@ -5,7 +5,7 @@ import {handleMessage} from '../src/bot.js';
 import {ChannelType, MessageFlags, PermissionFlagsBits} from 'discord.js';
 const origin = 'https://openrotmg.org';
 function fixture() {
-  return {schema: 2, id: 'a'.repeat(24), created_at_unix_ms: Date.parse('2026-10-16T12:00:00Z'),
+  return {schema: 3, reporter_name: 'BugWizard', id: 'a'.repeat(24), created_at_unix_ms: Date.parse('2026-10-16T12:00:00Z'),
     message_untrusted: 'Enemies freeze, then catch up\nI can still move.', account_id: 123456,
     context: {player_id: 654321, world_name: 'PRIVATE_WORLD'},
     connection: {user_agent: 'PRIVATE_UA'}, diagnostics: {environment: {browser: 'Chrome', os: 'Linux'}},
@@ -25,10 +25,15 @@ test('title uses first line, normalized whitespace and 100 Unicode characters wi
   assert.equal(Array.from(bugTitle('🐉'.repeat(101))).length, 100);
   assert.throws(() => bugTitle('  \n '));
 });
-test('issue is description-first with one diagnostic link and no automatic identity/telemetry dump', () => {
+test('issue identifies the reporter without private account or telemetry data', () => {
   const report = fixture(), issue = bugIssue(report, origin);
   assert.equal(issue.title, 'Enemies freeze, then catch up');
   assert.match(issue.body, /> Enemies freeze, then catch up\n> I can still move\./);
+  assert.match(issue.body, /\*\*Reporter:\*\* BugWizard/);
+  for (const reporter_name of [undefined, '', ' ', 'a'.repeat(65), 'Bad\nName']) {
+    assert.throws(() => bugIssue({...report, reporter_name}, origin), /Invalid bug reporter name/);
+  }
+  assert.throws(() => bugIssue({...report, schema: 4}, origin), /identity\/schema/);
   assert.match(issue.body, /Chrome on Linux/); assert.ok(issue.body.endsWith(report.diagnostics_url));
   assert.ok(issue.body.length < 500);
   for (const excluded of ['PRIVATE_', '123456', '654321', '```', 'Pi investigation', 'rtt']) assert.ok(!issue.body.includes(excluded));
@@ -78,15 +83,22 @@ function harness() {
 test('one GitHub issue, plain full description and URL with previews suppressed, no private dump or files', async () => {
   const h = harness(); await h.publish(); await h.publish();
   assert.equal(h.posts.length, 1); assert.equal(h.issues.length, 1); assert.equal(h.receipts.length, 2);
-  assert.deepEqual(h.posts[0], {body: {content: 'Enemies freeze, then catch up\nI can still move.\nhttps://github.com/OpenRotMG/Open-RotMG-Server/issues/1', flags: MessageFlags.SuppressEmbeds, allowed_mentions: {parse: []}, nonce: `u${'a'.repeat(24)}`, enforce_nonce: true}});
+  assert.deepEqual(h.posts[0], {body: {content: 'Reporter: BugWizard\nEnemies freeze, then catch up\nI can still move.\nhttps://github.com/OpenRotMG/Open-RotMG-Server/issues/1', flags: MessageFlags.SuppressEmbeds, allowed_mentions: {parse: []}, nonce: `u${'a'.repeat(24)}`, enforce_nonce: true}});
   assert.deepEqual(h.receipts.map(r => r.target), ['issue_number', 'public_message_id']);
 });
 test('notification preserves long descriptions while escaping markdown and mentions', async () => {
   const h = harness();
+  h.report.reporter_name = '**@everyone**';
   h.report.message_untrusted = '**broken** @everyone\n' + '🐉'.repeat(480);
   await h.publish();
-  assert.equal(h.posts[0].body.content, '\\*\\*broken\\*\\* @\u200beveryone\n' + '🐉'.repeat(480) + '\nhttps://github.com/OpenRotMG/Open-RotMG-Server/issues/1');
+  assert.equal(h.posts[0].body.content, 'Reporter: \\*\\*@\u200beveryone\\*\\*\n\\*\\*broken\\*\\* @\u200beveryone\n' + '🐉'.repeat(480) + '\nhttps://github.com/OpenRotMG/Open-RotMG-Server/issues/1');
   assert.ok(h.posts[0].body.content.length <= 2000);
+});
+test('schema 2 spooled reports explicitly disclose the unrecorded name', async () => {
+  const h = harness(); h.report.schema = 2; delete h.report.reporter_name;
+  await h.publish();
+  assert.match(h.issues[0].body, /Reporter:\*\* not recorded \(legacy report\)/);
+  assert.ok(h.posts[0].body.content.startsWith('Reporter: not recorded (legacy report)\n'));
 });
 test('outages and lost receipts resume without duplicating issue or notification', async () => {
   for (const stage of ['attachment', 'github', 'issue_number', 'discord', 'public_message_id']) {
