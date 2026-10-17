@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import { ChannelType, PermissionFlagsBits, Routes, escapeMarkdown } from 'discord.js';
+import { ChannelType, MessageFlags, PermissionFlagsBits, Routes, escapeMarkdown } from 'discord.js';
 
 export const PUBLIC_BUG_CHANNEL_ID = '1559759855621898313';
 const repository = 'OpenRotMG/Open-RotMG-Server';
@@ -56,7 +56,7 @@ async function existingMessage(rest, botId, report, url) {
     const query = new URLSearchParams({limit: '100'});
     if (before) query.set('before', before);
     const messages = await rest.get(Routes.channelMessages(PUBLIC_BUG_CHANNEL_ID), {query});
-    const match = messages.find(m => m.author.id === botId && m.content.split('\n').includes(url));
+    const match = messages.find(m => m.author.id === botId && m.content.endsWith(`\n${url}`));
     if (match) return match;
     if (messages.length < 100 || Date.parse(messages.at(-1).timestamp) < report.created_at_unix_ms - 10000) return null;
     before = messages.at(-1).id;
@@ -113,7 +113,7 @@ export function bugPublisher({rest, botId, config, log, request = fetch}) {
         stage = 'discord_notification';
         const url = issueUrl(report.delivery.issue_number);
         const message = await existingMessage(rest, botId, report, url) ?? await rest.post(Routes.channelMessages(PUBLIC_BUG_CHANNEL_ID), {
-          body: {content: `**#${report.delivery.issue_number}: ${text(payload.title)}**\n${url}`, allowed_mentions: {parse: []}, nonce: `u${report.id}`, enforce_nonce: true}
+          body: {content: `${text(report.message_untrusted)}\n${url}`, flags: MessageFlags.SuppressEmbeds, allowed_mentions: {parse: []}, nonce: `u${report.id}`, enforce_nonce: true}
         });
         await acknowledge('public_message_id', message.id);
       }
