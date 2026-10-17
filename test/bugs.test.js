@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {PUBLIC_BUG_CHANNEL_ID, BUG_REPLY, bugConfig, bugPublisher, bugTitle, bugIssue, validateBugChannels} from '../src/bugs.js';
 import {handleMessage} from '../src/bot.js';
-import {ChannelType, PermissionFlagsBits} from 'discord.js';
+import {ChannelType, MessageFlags, PermissionFlagsBits} from 'discord.js';
 const origin = 'https://openrotmg.org';
 function fixture() {
   return {schema: 2, id: 'a'.repeat(24), created_at_unix_ms: Date.parse('2026-10-16T12:00:00Z'),
@@ -73,19 +73,36 @@ function harness() {
     return Response.json({report});
   };
   const publish = bugPublisher({rest, botId: 'bot', config: {url: 'http://127.0.0.1:18923/internal/discord/bugs', publicOrigin: origin, token: 'game-secret', githubToken: 'github-secret'}, request, log: (...args) => logs.push(args)});
-  return {report, posts, issues, logs, receipts, publish, fail: value => {failure = value;}};
+  return {report, posts, issues, logs, receipts, messages, publish, fail: value => {failure = value;}};
 }
-test('one GitHub issue, two-line Discord notification, no private report post or files', async () => {
+test('one GitHub issue, plain full description and URL with previews suppressed, no private dump or files', async () => {
   const h = harness(); await h.publish(); await h.publish();
   assert.equal(h.posts.length, 1); assert.equal(h.issues.length, 1); assert.equal(h.receipts.length, 2);
-  assert.deepEqual(h.posts[0], {body: {content: '**#1: Enemies freeze, then catch up**\nhttps://github.com/OpenRotMG/Open-RotMG-Server/issues/1', allowed_mentions: {parse: []}, nonce: `u${'a'.repeat(24)}`, enforce_nonce: true}});
+  assert.deepEqual(h.posts[0], {body: {content: 'Enemies freeze, then catch up\nI can still move.\nhttps://github.com/OpenRotMG/Open-RotMG-Server/issues/1', flags: MessageFlags.SuppressEmbeds, allowed_mentions: {parse: []}, nonce: `u${'a'.repeat(24)}`, enforce_nonce: true}});
   assert.deepEqual(h.receipts.map(r => r.target), ['issue_number', 'public_message_id']);
+});
+test('notification preserves long descriptions while escaping markdown and mentions', async () => {
+  const h = harness();
+  h.report.message_untrusted = '**broken** @everyone\n' + '🐉'.repeat(480);
+  await h.publish();
+  assert.equal(h.posts[0].body.content, '\\*\\*broken\\*\\* @\u200beveryone\n' + '🐉'.repeat(480) + '\nhttps://github.com/OpenRotMG/Open-RotMG-Server/issues/1');
+  assert.ok(h.posts[0].body.content.length <= 2000);
 });
 test('outages and lost receipts resume without duplicating issue or notification', async () => {
   for (const stage of ['attachment', 'github', 'issue_number', 'discord', 'public_message_id']) {
     const h = harness(); h.fail(stage); await h.publish();
     assert.ok(h.logs.some(([event]) => event === 'bug_delivery_failed'), stage);
     await h.publish(); assert.equal(h.posts.length, 1, stage); assert.equal(h.issues.length, 1, stage); assert.equal(h.receipts.length, 2, stage);
+  }
+});
+test('reconciliation uses the final issue link, including legacy notifications', async () => {
+  const url = 'https://github.com/OpenRotMG/Open-RotMG-Server/issues/1';
+  for (const [content, posts] of [[`**#1: Old title**\n${url}`, 0], [`Plain report\n${url}`, 0], [`Report mentioning\n${url}\n${url}23`, 1]]) {
+    const h = harness();
+    h.messages.push({id: 'existing', author: {id: 'bot'}, content});
+    await h.publish();
+    assert.equal(h.posts.length, posts);
+    assert.equal(h.report.delivery.public_message_id, posts ? '1560000000000000000' : 'existing');
   }
 });
 test('overlapping poll calls cannot publish duplicates', async () => {
