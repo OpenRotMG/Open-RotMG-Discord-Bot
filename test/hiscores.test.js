@@ -7,6 +7,8 @@ const scores = {updated_at:1,players:[player(3,10),player(2,10,'1558662335076376
 
 test('top ten has competition ties, stable account ordering, website link, no buttons or pings', () => {
   const message = boardMessage(scores.players,categories[0],'https://openrotmg.org/');
+  assert.equal(message.embeds[0].title,'Living fame · Top 10');
+  assert.match(message.embeds[0].description,/^Highest fame of an alive character per account\./);
   assert.deepEqual(message.allowed_mentions,{parse:[]});assert.equal(message.components,undefined);
   assert.match(message.embeds[0].description,/\*\*1\.\*\* Guest1/);
   assert.match(message.embeds[0].description,/\*\*2\.\*\* Guest2.*<@1558662335076376578>/);
@@ -28,10 +30,13 @@ test('edits permanent messages only when content changes, retries failed edits',
   await assert.rejects(refreshBoards({patch:async()=>{throw Error('denied');}},boards,{...scores,players:[]},'https://openrotmg.org/'),/denied/);assert.equal(boards[0].previous,before);
 });
 test('setup adopts only exact bot-marked messages; missing/duplicate channels fail closed',async()=>{
-  const channels=[{id:'1559701388928483419',name:'Hiscores',type:4},...categories.map((c,i)=>({id:`c${i}`,name:c.name,type:0,parent_id:'1559701388928483419'}))];
+  const channels=[{id:'1559701388928483419',name:'Hiscores',type:4},...categories.map((c,i)=>({id:`c${i}`,name:c.name,type:0,parent_id:'1559701388928483419',topic:i===0?'Best single-character base fame per account, living or dead.':c.rule}))];
   const config={guildId:'guild',categoryId:'1559701388928483419',botId:'bot',site:'https://openrotmg.org/'};
-  const rest={get:async route=>route.includes('/guilds/')?channels:[{id:'foreign',author:{id:'other'},embeds:[{footer:{text:'Open RotMG hiscores'}}]},{id:'own',author:{id:'bot'},embeds:[{footer:{text:'Open RotMG hiscores'}}]}]};
+  const edits=[];
+  const rest={patch:async(route,payload)=>edits.push({route,payload}),get:async route=>route.includes('/guilds/')?channels:[{id:'foreign',author:{id:'other'},embeds:[{footer:{text:'Open RotMG hiscores'}}]},{id:'own',author:{id:'bot'},embeds:[{footer:{text:'Open RotMG hiscores'}}]}]};
   const boards=await setupBoards(rest,config);assert.equal(boards.length,3);assert.equal(boards[0].messageId,'own');
+  assert.deepEqual(edits,[{route:'/channels/c0',payload:{body:{topic:categories[0].rule}}}]);
+  await assert.rejects(setupBoards({...rest,patch:async()=>{throw Error('topic denied');}},config),/topic denied/);
   await assert.rejects(setupBoards({get:async()=>channels.slice(0,1)},config),/Missing #fame/);
   await assert.rejects(setupBoards({get:async()=>[...channels,channels[1]]},config),/Duplicate/);
 });
