@@ -1,7 +1,7 @@
 import {Routes, ChannelType, PermissionFlagsBits} from 'discord.js';
 
 export const categories = [
-  {name: 'fame', metric: 'base_fame', title: 'Base fame', rule: 'Best single-character base fame per account, living or dead.'},
+  {name: 'fame', metric: 'base_fame', title: 'Living fame', rule: 'Highest fame of an alive character per account.'},
   {name: 'collection', metric: 'collection', title: 'Collection', rule: 'Items personally picked up from enemy drops'},
   {name: 'total-fame', metric: 'total_fame', title: 'Total fame', rule: 'Available account fame. Earned from dead characters and reduced when spent.'}
 ];
@@ -60,6 +60,7 @@ export async function setupBoards(rest, {guildId, categoryId, botId, site, creat
       if (!create) throw new Error(`Missing permanent message in #${category.name}; run the explicit hiscores setup command`);
       message = await rest.post(Routes.channelMessages(channel.id), {body: boardMessage([], category, site)});
     }
+    if (category.metric === 'base_fame' && channel.topic !== category.rule) await rest.patch(Routes.channel(channel.id), {body: {topic: category.rule}});
     boards.push({category, channelId: channel.id, messageId: message.id, previous: null});
   }
   return boards;
