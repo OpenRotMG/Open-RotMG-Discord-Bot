@@ -1,7 +1,7 @@
 import {Routes, ChannelType, PermissionFlagsBits} from 'discord.js';
 
 export const categories = [
-  {name: 'fame', metric: 'base_fame', title: 'Living fame', rule: 'Highest fame of an alive character per account.'},
+  {name: 'living-fame', metric: 'base_fame', title: 'Living fame', rule: 'Highest fame of an alive character per account.'},
   {name: 'collection', metric: 'collection', title: 'Collection', rule: 'Items personally picked up from enemy drops'},
   {name: 'total-fame', metric: 'total_fame', title: 'Total fame', rule: 'Available account fame. Earned from dead characters and reduced when spent.'}
 ];

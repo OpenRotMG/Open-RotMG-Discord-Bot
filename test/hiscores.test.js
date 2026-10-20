@@ -36,7 +36,7 @@ test('setup adopts only exact bot-marked messages; missing/duplicate channels fa
   const boards=await setupBoards(rest,config);assert.equal(boards.length,3);assert.equal(boards[0].messageId,'own');
   assert.deepEqual(edits,[{route:'/channels/c0',payload:{body:{topic:categories[0].rule}}}]);
   await assert.rejects(setupBoards({...rest,patch:async()=>{throw Error('topic denied');}},config),/topic denied/);
-  await assert.rejects(setupBoards({get:async()=>channels.slice(0,1)},config),/Missing #fame/);
+  await assert.rejects(setupBoards({get:async()=>channels.slice(0,1)},config),/Missing #living-fame/);
   await assert.rejects(setupBoards({get:async()=>[...channels,channels[1]]},config),/Duplicate/);
 });
 test('read-only boards preserve category visibility instead of widening private access', () => {
