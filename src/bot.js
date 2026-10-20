@@ -43,16 +43,13 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
       await interaction.reply({...buildLevel(store, guildId, userId), flags: 64});
     } else if (interaction.commandName === 'link') {
       if (!linkGame) throw new Error('Game linking API is not configured');
-      const code = interaction.options.getString('code');
-      if (!code) {
-        await interaction.reply({content: 'Sign into your registered game account and type /discord in game. Then use /link code:<your private code> within five minutes. Linking shows your Discord identity on hiscores. Never send a password here.', flags: 64});
-        return;
-      }
       await interaction.deferReply({flags: 64});
       try {
-        const result = await linkGame(code, userId);
-        await interaction.editReply({content: `Linked to **${result.name}**. Your Discord identity will appear on the game hiscores.`, allowedMentions: {parse: []}});
-      } catch (error) { await interaction.editReply({content: `Link could not be confirmed: ${error.message}. Use /discord in game to check whether this account is already linked.`, allowedMentions: {parse: []}}); }
+        const result = await linkGame(userId);
+        const url = new URL(result.url);
+        if (url.origin !== 'https://openrotmg.org' || url.pathname !== '/link/' || url.search || !/^#[a-f0-9]{64}$/.test(url.hash) || url.username || url.password) throw new Error('Invalid linking response');
+        await interaction.editReply({content: 'Link your OpenRotMG account', components: [{type: 1, components: [{type: 2, style: 5, label: 'Link game account', url: url.href}]}], allowedMentions: {parse: []}});
+      } catch (error) { await interaction.editReply({content: `Link could not be started: ${error.message}`, allowedMentions: {parse: []}}); }
     } else if (['kick', 'recover'].includes(interaction.commandName)) {
       const kick = interaction.commandName === 'kick';
       if (kick ? !kickGame : !recoverGame) throw new Error('Game account API is not configured');

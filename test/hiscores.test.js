@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {categories, boardMessage, boardOverwrites, validateScores, setupBoards, refreshBoards, gameJson} from '../src/hiscores.js';
-import {handleInteraction} from '../src/bot.js';
 const player = (account, value, discord_id = null) => ({account, name:`Guest${account}`, discord_id, base_fame:value, collection:value, total_fame:value});
 const scores = {updated_at:1,players:[player(3,10),player(2,10,'1558662335076376578'),player(1,20)]};
 
@@ -50,15 +49,7 @@ test('read-only boards preserve category visibility instead of widening private 
 test('private API never follows redirects, has deadline, no credentials for public scores',async()=>{
   const calls=[];const fetchImpl=async(url,opts)=>{calls.push(opts);return {ok:true,json:async()=>({name:'Owner'})};};
   await gameJson('http://127.0.0.1:19087/api/hiscores',{fetchImpl});assert.deepEqual(calls[0].headers,{});assert.equal(calls[0].redirect,'error');
-  await gameJson('http://127.0.0.1:19087/internal/discord/link',{fetchImpl,token:'private',body:{code:'secret',discord_id:'id'}});
+  await gameJson('http://127.0.0.1:19087/internal/discord/link/start',{fetchImpl,token:'private',body:{discord_id:'id'}});
   assert.equal(calls[1].headers.authorization,'Bearer private');assert.ok(calls[1].signal);assert.equal(calls[1].method,'POST');
   await assert.rejects(gameJson('http://localhost',{fetchImpl:async()=>({ok:false,status:400,json:async()=>({error:'invalid or expired link code'})})}),/expired/);
-});
-test('/link is ephemeral, redeems the invoking Discord identity, instructions contain no password request',async()=>{
-  const calls=[];let redeemed;
-  const interaction={guildId:'guild',user:{id:'1558662335076376578'},commandName:'link',isChatInputCommand:()=>true,options:{getString:()=> 'a'.repeat(32)},deferReply:async p=>calls.push(p),editReply:async p=>calls.push(p)};
-  await handleInteraction(interaction,{guildId:'guild',linkGame:async(code,id)=>{redeemed={code,id};return {name:'Owner'};}});
-  assert.equal(calls[0].flags,64);assert.equal(redeemed.id,interaction.user.id);assert.match(calls[1].content,/Linked to \*\*Owner/);
-  interaction.options.getString=()=>null;interaction.reply=async p=>calls.push(p);
-  await handleInteraction(interaction,{guildId:'guild',linkGame:async()=>assert.fail('must not call API')});assert.equal(calls.at(-1).flags,64);assert.match(calls.at(-1).content,/Never send a password/);
 });

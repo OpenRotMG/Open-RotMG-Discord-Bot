@@ -38,7 +38,7 @@ const context = {store, guildId, announceRoleId,
   announceGame: text => gameJson(`${gameOrigin}/internal/discord/announce`, {body: {text}, token: linkToken, timeout: 20000}),
   kickGame: discord_id => gameJson(`${gameOrigin}/internal/discord/kick`, {body: {discord_id}, token: linkToken, timeout: 20000}),
   recoverGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/recover`, {body: {discord_id, ...(code ? {code} : {})}, token: linkToken}),
-  linkGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/link`, {body: {code, discord_id}, token: linkToken}), gameStatus: async () => {
+  linkGame: discord_id => gameJson(`${gameOrigin}/internal/discord/link/start`, {body: {discord_id}, token: linkToken}), gameStatus: async () => {
   const status = await readGameStatus(gameStatusUrl);
   if (!status.online) log('game_status_down', status.reason);
   return status;

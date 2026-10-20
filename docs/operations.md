@@ -14,15 +14,15 @@ Run tests with `npm install --package-lock=false && npm test`. To start on Windo
 
 `/help` lists commands, `/level` shows your level and leaderboard, `/uptime` shows game server uptime, and `/players` separates online players from game bots. Replies are private.
 
-`/link` explains how to type `/discord` while signed into a registered game account, then privately redeems the five-minute one-use code. Replies are ephemeral and bind only the actual interaction user ID. No game password is requested. Conflicts never replace links. `/kick` saves and disconnects only your linked game connection, never another player. Failed saves return an error rather than clearing ownership.
+`/link` privately opens browser linking: existing game login and matching Discord OAuth identity automatically enable linking and recovery. Signed-out users use the normal game tab. No passwords enter Discord; conflicting associations are never replaced. `/kick` saves and disconnects only your linked game connection, never another player. Failed saves return an error rather than clearing ownership.
 
-For password recovery, first opt in while signed into the game: `/discord recovery`, then ephemeral `/recover code:<consent code>`. This authorizes your linked Discord account to reset the game password. Later `/recover` returns a private one-use HTTPS link, valid 15 minutes. Enter the password only on the website; completion saves/disconnects the active session. `/discord norecovery` in game revokes permission and outstanding grants. Existing links are not automatically opted in. Guests, unlinked accounts and credential-free disaster restores cannot recover this way.
+After `/link`, `/recover` privately issues a one-use HTTPS reset link valid 15 minutes. Enter passwords only on the website; completion saves/disconnects the active session. In-game `/discord norecovery` revokes permission and outstanding grants; `/link` re-enables recovery. Existing links are not automatically opted in. Guests, unlinked accounts and credential-free disaster restores cannot recover this way. Setup and guarantees: https://github.com/OpenRotMG/Open-RotMG-Server/blob/main/docs/hiscores.md
 
 Game status uses read-only HTTP GET. The endpoint must return nonnegative integer `uptime_seconds`, `players` (humans) and `bots`. Unreachable, timed-out or failing servers display “down”; malformed responses and configuration errors are logged explicitly, not turned into zero counts.
 
 ## Permanent game hiscores
 
-Set `HISCORES_CATEGORY_ID` to the `Hiscores` category in your own test server and `GAME_API_URL` to the game server's explicit HTTP loopback origin. Set `DISCORD_LINK_TOKEN_FILE` to the same private credential file configured for the game server; it is separate from the Discord token. The API grants narrowly scoped caller-bound link redemption, self-disconnection and opt-in reset-link issuance. It grants no gameplay, database access or password submission.
+Set `HISCORES_CATEGORY_ID` to the `Hiscores` category in your own test server and `GAME_API_URL` to the game server's explicit HTTP loopback origin. Set `DISCORD_LINK_TOKEN_FILE` to the same private credential file configured for the game server; it is separate from the Discord token. The API grants narrowly scoped caller-bound link issuance, self-disconnection and reset-link issuance. It grants no gameplay, database access or password submission.
 
 Run the explicit setup once:
 
