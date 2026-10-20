@@ -18,7 +18,7 @@ function command(name, extra = {}) {
 }
 
 test('help and registration share the exact complete command list', async () => {
-  assert.deepEqual(COMMANDS.map(c => c.name), ['help', 'level', 'uptime', 'players', 'link', 'announce', 'kick', 'recover']);
+  assert.deepEqual(COMMANDS.map(c => c.name), ['help', 'level', 'uptime', 'players', 'link', 'unlink', 'announce', 'kick', 'recover']);
   assert.equal(new Set(COMMANDS.map(c => c.name)).size, COMMANDS.length);
   for (const c of COMMANDS) {
     assert.equal(c.type, 1);
