@@ -1,6 +1,7 @@
 import { buildLevel, jumpModal } from './levels.js';
 import { COMMANDS, formatUptime } from './commands.js';
 import { BUG_REPLY } from './bugs.js';
+import {followLink} from './link.js';
 const bugReplies = new Map();
 
 export async function handleMessage(message, {store, guildId, now = Date.now}) {
@@ -30,7 +31,7 @@ export async function replyInteractionError(interaction) {
   else if (!interaction.replied) await interaction.reply({...payload, flags: 64});
 }
 
-export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, kickGame, recoverGame, announceRoleId, announceGame}) {
+export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, linkStatus, unlinkGame, kickGame, recoverGame, announceRoleId, announceGame}) {
   if (interaction.guildId !== guildId) {
     await interaction.reply({content: 'This bot is configured for the Open RotMG server only.', flags: 64});
     return;
@@ -42,14 +43,23 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
     } else if (interaction.commandName === 'level') {
       await interaction.reply({...buildLevel(store, guildId, userId), flags: 64});
     } else if (interaction.commandName === 'link') {
-      if (!linkGame) throw new Error('Game linking API is not configured');
+      if (!linkGame || !linkStatus) throw new Error('Game linking API is not configured');
       await interaction.deferReply({flags: 64});
       try {
         const result = await linkGame(userId);
         const url = new URL(result.url);
         if (url.origin !== 'https://openrotmg.org' || url.pathname !== '/link/' || url.search || !/^#[a-f0-9]{64}$/.test(url.hash) || url.username || url.password) throw new Error('Invalid linking response');
         await interaction.editReply({content: 'Link your OpenRotMG account', components: [{type: 1, components: [{type: 2, style: 5, label: 'Link game account', url: url.href}]}], allowedMentions: {parse: []}});
-      } catch (error) { await interaction.editReply({content: `Link could not be started: ${error.message}`, allowedMentions: {parse: []}}); }
+        await followLink(interaction, url.hash.slice(1), linkStatus);
+      } catch (error) { await interaction.editReply({content: `Link could not be confirmed: ${error.message}. Run /link again.`, components: [], allowedMentions: {parse: []}}); }
+    } else if (interaction.commandName === 'unlink') {
+      if (!unlinkGame) throw new Error('Game unlinking API is not configured');
+      await interaction.deferReply({flags: 64});
+      try {
+        const result = await unlinkGame(userId);
+        if (typeof result.unlinked !== 'boolean') throw new Error('Invalid unlink response');
+        await interaction.editReply({content: result.unlinked ? 'Account unlinked. Discord password recovery is disabled and outstanding recovery links are revoked. Your game password has not changed.' : 'No game account is linked to your Discord. Any pending link has been cancelled.', allowedMentions: {parse: []}});
+      } catch (error) { await interaction.editReply({content: `Unlink could not be confirmed: ${error.message}`, allowedMentions: {parse: []}}); }
     } else if (['kick', 'recover'].includes(interaction.commandName)) {
       const kick = interaction.commandName === 'kick';
       if (kick ? !kickGame : !recoverGame) throw new Error('Game account API is not configured');
