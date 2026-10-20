@@ -1,6 +1,6 @@
 <h1><img src=".github/readme-icon.png" width="44" height="44" align="absmiddle" alt=""> Open RotMG / Discord Bot</h1>
 
-Chat levels, permanent game hiscores, private game-account linking, server status and amulet post reactions.
+Chat levels, permanent game hiscores, private account linking/recovery, server status and amulet post reactions.
 
 ## Run locally
 
