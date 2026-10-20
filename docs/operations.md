@@ -30,7 +30,7 @@ Run the explicit setup once:
 node --env-file=.env scripts/setup-hiscores.js
 ```
 
-It creates `#fame`, `#collection` and `#total-fame` under that category and one permanent bot-owned top-ten message in each. Creating channels requires Manage Channels; alternatively create those exact text channels yourself and grant the bot View Channel, Send Messages, Read Message History and Embed Links. No Administrator or privileged gateway intent is needed. Setup refuses duplicate names/managed messages. Routine startup never creates missing resources silently.
+It creates `#living-fame`, `#collection` and `#total-fame` under that category and one permanent bot-owned top-ten message in each. Creating channels requires Manage Channels; alternatively create those exact text channels yourself and grant the bot View Channel, Send Messages, Read Message History and Embed Links. No Administrator or privileged gateway intent is needed. Setup refuses duplicate names/managed messages. Routine startup never creates missing resources silently.
 
 Messages update once a minute only when scores or identities change. Each links to the full website board. There is no `/hiscores`, pagination button or interaction UI. Ties share rank; mentions do not ping. Failures leave the previous message intact and log `hiscores_refresh_failed`, rather than publishing invented zeros. The game server's `docs/hiscores.md` defines the metrics, eligibility and collection provenance.
 
