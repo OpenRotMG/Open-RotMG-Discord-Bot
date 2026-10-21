@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import {serverAlerts} from './alerts.js';
 import { isAbsolute } from 'node:path';
 import { Client, Events, GatewayIntentBits, Routes } from 'discord.js';
 import { openStore } from './store.js';
@@ -49,6 +50,10 @@ const context = {store, guildId, announceRoleId,
 let enabled = false;
 let react;
 let boards;
+const alerts = process.env.SERVER_ALERT_CHANNEL_ID ? serverAlerts({rest: client.rest, guildId,
+  channelId: process.env.SERVER_ALERT_CHANNEL_ID, healthUrl: gameStatusUrl,
+  incidentUrl: `${gameOrigin}/internal/discord/critical-incident`, token: linkToken,
+  statePath: `${databasePath}.alerts.json`, log}) : null;
 function log(event, fields = {}) {
   console.log(JSON.stringify({time: new Date().toISOString(), event, ...fields}));
 }
@@ -81,6 +86,7 @@ try {
   if (!client.guilds.cache.has(guildId)) throw new Error(`Bot is not installed in configured guild ${guildId}`);
   react = await postReactor(client.rest, reactions, log);
   if (bugs) await validateBugChannels(client, guildId);
+  if (alerts) await alerts.start(client);
   boards = await setupBoards(client.rest, {guildId, categoryId: process.env.HISCORES_CATEGORY_ID, botId: client.user.id, site});
   await client.rest.put(Routes.applicationGuildCommands(client.user.id, guildId), {
     body: COMMANDS,
@@ -91,6 +97,13 @@ try {
 }
 clearTimeout(startupDeadline);
 enabled = true;
+async function monitorServer() {
+  try { await alerts.poll(); }
+  catch (err) { error('server_monitor_failed', err); }
+}
+const alertTimer = alerts ? setInterval(monitorServer, 10000) : null;
+if (alerts) void monitorServer();
+else log('server_monitor_disabled', {reason: 'SERVER_ALERT_CHANNEL_ID is not set'});
 log('ready', {botId: client.user.id, guildId, reactionChannelIds: reactions.channelIds, reactionEmojiId: reactions.emojiId});
 let refreshing = false;
 async function updateHiscores() {
@@ -120,7 +133,7 @@ if (publishBugs) void publishBugs();
 else log('bug_reporting_disabled', {reason: 'BUG_REPORTING is not set'});
 const heartbeat = setInterval(() => log('heartbeat', {guildId, gatewayStatus: client.ws.status}), 60000);
 function stop(signal) {
-  log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); clearInterval(updateTimer); clearInterval(bugTimer); client.destroy(); store.close();
+  log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); clearInterval(updateTimer); clearInterval(bugTimer); clearInterval(alertTimer); client.destroy(); store.close();
 }
 process.once('SIGTERM', () => stop('SIGTERM'));
 process.once('SIGINT', () => stop('SIGINT'));
