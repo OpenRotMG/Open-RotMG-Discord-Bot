@@ -56,7 +56,7 @@ export function serverAlerts({rest, channelId, guildId, healthUrl, incidentUrl, 
       }
       let failure = null;
       try {
-      if (incidentResult.status === 'fulfilled') {
+        if (incidentResult.status === 'rejected') throw new Error(`Critical incident feed unavailable (${incidentResult.reason.message})`);
         failure = incidentResult.value.incident;
         if (failure !== null && (!/^\d+-\d+$/.test(failure?.id) || !['world','persistence'].includes(failure.component) || !['panicked','failed','exited'].includes(failure.failure)
           || !Number.isSafeInteger(failure.unix_ms) || !(failure.revision === null || /^[a-f0-9]{40}$/.test(failure.revision))
@@ -65,15 +65,14 @@ export function serverAlerts({rest, channelId, guildId, healthUrl, incidentUrl, 
           const context = failure.context;
           if (!context || ![context.world,context.tick,...(context.npc ?? [])].every(v => v === null || Number.isSafeInteger(v))) throw new Error('Malformed incident context');
         }
-      } else log('server_incident_read_failed', {error: incidentResult.reason.message});
       } catch (error) {
         log('server_incident_read_failed', {error: error.message});
-        problem ??= 'Monitoring impaired: malformed critical incident response';
+        problem ??= `Monitoring impaired: ${error.message}`;
         failure = null;
       }
       if (failure && state.seen !== failure.id) {
         const context = failure.context;
-        const detail = `Critical ${failure.component} worker ${failure.failure}\nRevision: ${failure.revision ?? 'unavailable'}\nSource: ${failure.location ?? 'not captured'}\nWorld/tick/NPC: ${JSON.stringify(context)}\nFailure time: ${new Date(failure.unix_ms).toISOString()}\nDetails and backtrace remain in the private server journal.`;
+        const detail = `Critical ${failure.component} worker ${failure.failure}\nRevision: ${failure.revision ?? 'unavailable'}\nSource: ${failure.location ?? 'not captured'}\nWorld/tick/NPC: ${JSON.stringify({world: context.world, tick: context.tick, npc: context.npc})}\nFailure time: ${new Date(failure.unix_ms).toISOString()}\nDetails and backtrace remain in the private server journal.`;
         if (!state.open) {
           const id = `critical-${failure.id}`;
           const messageId = await send(id, `🔴 Server incident ${id}\n${detail}`);
