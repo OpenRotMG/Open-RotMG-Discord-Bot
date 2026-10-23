@@ -43,7 +43,7 @@ test('issue identifies the reporter without private account or telemetry data', 
   assert.ok(!bugIssue(report, origin).body.includes('@everyone'));
 });
 function harness() {
-  const report = fixture(), posts = [], issues = [], logs = [], receipts = [], messages = [];
+  const report = fixture(), posts = [], issues = [], comments = [], logs = [], receipts = [], messages = [];
   let failure;
   const rest = {
     async get(route) {assert.equal(route, `/channels/${PUBLIC_BUG_CHANNEL_ID}/messages`); return messages;},
@@ -62,6 +62,15 @@ function harness() {
     }
     if (url.startsWith('https://api.github.com/')) {
       assert.equal(options.headers.authorization, 'Bearer github-secret');
+      if (url === 'https://api.github.com/user') return Response.json({id: 42});
+      if (/\/issues\/\d+\/comments/.test(url)) {
+        if (options.method !== 'POST') return Response.json(comments);
+        if (failure === 'comment') {failure = null; return new Response('', {status: 503});}
+        const comment = {id: comments.length + 100, user: {id: 42}, ...JSON.parse(options.body)};
+        comments.push(comment);
+        if (failure === 'comment_response') {failure = null; throw Error('Lost comment response');}
+        return Response.json(comment);
+      }
       if (options.method === 'POST') {
         if (failure === 'github') {failure = null; return new Response('', {status: 503});}
         issues.push({number: issues.length + 1, ...JSON.parse(options.body)}); return Response.json(issues.at(-1));
@@ -73,12 +82,27 @@ function harness() {
     if (options.method === 'POST') {
       const receipt = JSON.parse(options.body);
       if (failure === receipt.target) {failure = null; return new Response('', {status: 503});}
-      report.delivery[receipt.target] = receipt.id; receipts.push(receipt); return new Response(null, {status: 204});
+      if (receipt.target === 'notes') {
+        report.delivery.notes_through = receipt.through;
+        report.delivery.note_comment_id = receipt.id;
+        report.delivery.note_batch = null;
+      } else report.delivery[receipt.target] = receipt.id;
+      if (report.delivery.issue_number && report.delivery.public_message_id && (!report.notes || report.delivery.notes_through === report.notes.length)) report.delivery.status = 'delivered';
+      receipts.push(receipt); return new Response(null, {status: 204});
+    }
+    if (report.delivery.status === 'delivered') return Response.json({report: null});
+    if (report.notes && report.delivery.notes_through < report.notes.length && !report.delivery.note_batch) {
+      report.delivery.note_batch = {from: report.delivery.notes_through + 1, through: report.notes.length};
     }
     return Response.json({report});
   };
   const publish = bugPublisher({rest, botId: 'bot', config: {url: 'http://127.0.0.1:18923/internal/discord/bugs', publicOrigin: origin, token: 'game-secret', githubToken: 'github-secret'}, request, log: (...args) => logs.push(args)});
-  return {report, posts, issues, logs, receipts, messages, publish, fail: value => {failure = value;}};
+  return {report, posts, issues, comments, logs, receipts, messages, publish, fail: value => {failure = value;}};
+}
+function addNote(h, text) {
+  if (!h.report.notes) {h.report.notes = []; h.report.delivery.notes_through = 0;}
+  h.report.notes.push({created_at_unix_ms: h.report.created_at_unix_ms + h.report.notes.length + 1, text_untrusted: text});
+  h.report.delivery.status = 'pending';
 }
 test('one GitHub issue, plain full description and URL with previews suppressed, no private dump or files', async () => {
   const h = harness(); await h.publish(); await h.publish();
@@ -120,6 +144,49 @@ test('reconciliation uses the final issue link, including legacy notifications',
 test('overlapping poll calls cannot publish duplicates', async () => {
   const h = harness(); await Promise.all([h.publish(), h.publish(), h.publish()]);
   assert.equal(h.posts.length, 1); assert.equal(h.issues.length, 1);
+});
+test('queued and later details become comments on one unchanged issue without extra Discord posts', async () => {
+  const h = harness(), original = h.report.message_untrusted;
+  addNote(h, 'First detail'); addNote(h, '**Second** @everyone\n🐉 detail');
+  await h.publish();
+  assert.equal(h.comments.length, 1);
+  assert.match(h.comments[0].body, /^<!-- openrotmg-bug-info:a{24}:1:2 -->/);
+  assert.match(h.comments[0].body, /> First detail/);
+  assert.ok(h.comments[0].body.includes('\\*\\*Second\\*\\* @\u200beveryone'));
+  assert.ok(!h.comments[0].body.includes('PRIVATE_'));
+  assert.equal(h.report.delivery.notes_through, 2);
+  addNote(h, 'Third detail after delivery'); await h.publish(); await h.publish();
+  assert.equal(h.comments.length, 2); assert.equal(h.issues.length, 1); assert.equal(h.posts.length, 1);
+  assert.equal(h.report.message_untrusted, original);
+  assert.ok(!h.issues[0].body.includes('First detail'));
+  assert.equal(h.report.delivery.notes_through, 3);
+  assert.deepEqual(h.receipts.filter(r => r.target === 'notes').map(r => r.through), [2, 3]);
+});
+test('a frozen note batch survives outages and lost receipts while new notes arrive', async () => {
+  for (const stage of ['comment', 'comment_response', 'notes']) {
+    const h = harness(); addNote(h, 'First detail'); h.fail(stage); await h.publish();
+    assert.ok(h.logs.some(([event]) => event === 'bug_delivery_failed'), stage);
+    assert.deepEqual(h.report.delivery.note_batch, {from: 1, through: 1});
+    addNote(h, 'Arrived during the outage'); await h.publish();
+    assert.equal(h.comments.length, 1, stage); assert.equal(h.report.delivery.notes_through, 1, stage);
+    await h.publish();
+    assert.equal(h.comments.length, 2, stage); assert.equal(h.issues.length, 1, stage); assert.equal(h.posts.length, 1, stage);
+    assert.match(h.comments[1].body, /:2:2 -->/); assert.ok(!h.comments[1].body.includes('First detail'));
+    assert.equal(h.report.delivery.notes_through, 2, stage);
+  }
+});
+test('comment reconciliation ignores another GitHub user copying the batch marker', async () => {
+  const h = harness(); addNote(h, 'Real player detail');
+  h.comments.push({id: 99, user: {id: 999}, body: `<!-- openrotmg-bug-info:${h.report.id}:1:1 -->\nForged`});
+  await h.publish();
+  assert.equal(h.comments.length, 2); assert.equal(h.report.delivery.note_comment_id, '101');
+  assert.match(h.comments[1].body, /Real player detail/);
+});
+test('invalid note batch bounds fail explicitly without acknowledging details', async () => {
+  const h = harness(); addNote(h, 'Detail'); h.report.delivery.note_batch = {from: 1, through: 2};
+  await h.publish();
+  assert.equal(h.comments.length, 0); assert.equal(h.report.delivery.notes_through, 0);
+  assert.ok(h.logs.some(([event]) => event === 'bug_delivery_failed'));
 });
 test('configuration and required notification permissions fail explicitly', async () => {
   assert.equal(bugConfig({}, '', ''), null); assert.throws(() => bugConfig({BUG_REPORTING: 'false'}, '', ''));
