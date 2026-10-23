@@ -4,6 +4,7 @@ import { ChannelType, MessageFlags, PermissionFlagsBits, Routes, escapeMarkdown 
 
 export const PUBLIC_BUG_CHANNEL_ID = '1559759855621898313';
 const repository = 'OpenRotMG/Open-RotMG-Server';
+const repoPath = `repos/${repository}`;
 export const BUG_REPLY = 'Please run /bug <description> in game so we can add this to our backlog!';
 
 export function bugConfig(env, gameOrigin, linkToken) {
@@ -71,7 +72,7 @@ async function existingMessage(rest, botId, report, url) {
   throw new Error(`Bug ${report.id}: reconciliation exceeded 1000 messages; manual review required`);
 }
 export function bugPublisher({rest, botId, config, log, request = fetch}) {
-  let running = false;
+  let running = false, githubUserId;
   async function api(path, options = {}) {
     const response = await request(config.url + path, {...options,
       headers: {authorization: `Bearer ${config.token}`, 'content-type': 'application/json'},
@@ -80,7 +81,7 @@ export function bugPublisher({rest, botId, config, log, request = fetch}) {
     return response;
   }
   async function github(path, options = {}) {
-    const response = await request(`https://api.github.com/repos/${repository}${path}`, {...options,
+    const response = await request(`https://api.github.com/${path}`, {...options,
       headers: {authorization: `Bearer ${config.githubToken}`, accept: 'application/vnd.github+json', 'content-type': 'application/json', 'x-github-api-version': '2022-11-28'},
       redirect: 'error', signal: AbortSignal.timeout(10000)});
     if (!response.ok) throw new Error(`GitHub bug API returned HTTP ${response.status}`);
@@ -88,12 +89,37 @@ export function bugPublisher({rest, botId, config, log, request = fetch}) {
   }
   async function issue(report, payload) {
     for (let page = 1; page <= 10; page++) {
-      const issues = await github(`/issues?state=all&since=${encodeURIComponent(new Date(report.created_at_unix_ms).toISOString())}&per_page=100&page=${page}`);
+      const issues = await github(`${repoPath}/issues?state=all&since=${encodeURIComponent(new Date(report.created_at_unix_ms).toISOString())}&per_page=100&page=${page}`);
       const match = issues.find(i => !i.pull_request && i.body?.startsWith(`<!-- openrotmg-bug:${report.id} -->`));
       if (match) return match;
-      if (issues.length < 100) return github('/issues', {method: 'POST', body: JSON.stringify(payload)});
+      if (issues.length < 100) return github(`${repoPath}/issues`, {method: 'POST', body: JSON.stringify(payload)});
     }
     throw new Error(`Bug ${report.id}: issue reconciliation exceeded 1000 issues; manual review required`);
+  }
+  async function details(report) {
+    const {notes, delivery} = report, batch = delivery.note_batch;
+    if (!Array.isArray(notes) || notes.length > 32 || !batch || !Number.isSafeInteger(delivery.notes_through)
+        || batch.from !== delivery.notes_through + 1 || !Number.isSafeInteger(batch.through)
+        || batch.through < batch.from || batch.through > notes.length) throw new Error('Invalid bug note batch');
+    const marker = `<!-- openrotmg-bug-info:${report.id}:${batch.from}:${batch.through} -->`;
+    const entries = notes.slice(batch.from - 1, batch.through).map(note => {
+      if (!Number.isSafeInteger(note.created_at_unix_ms) || note.created_at_unix_ms <= 0
+          || typeof note.text_untrusted !== 'string' || !note.text_untrusted.trim() || Array.from(note.text_untrusted).length > 500) throw new Error('Invalid bug note');
+      return `**${new Date(note.created_at_unix_ms).toISOString()}**\n` + note.text_untrusted.split(/\r?\n/).map(line => `> ${text(line)}`).join('\n');
+    });
+    if (githubUserId === undefined) {
+      const user = await github('user');
+      if (!Number.isSafeInteger(user.id) || user.id <= 0) throw new Error('Invalid GitHub publisher identity');
+      githubUserId = user.id;
+    }
+    const path = `${repoPath}/issues/${report.delivery.issue_number}/comments`;
+    for (let page = 1; page <= 10; page++) {
+      const comments = await github(`${path}?per_page=100&page=${page}`);
+      const match = comments.find(c => c.user?.id === githubUserId && c.body?.startsWith(marker + '\n'));
+      if (match) return match;
+      if (comments.length < 100) return github(path, {method: 'POST', body: JSON.stringify({body: `${marker}\n**Additional details from ${reporter(report)}**\n\n${entries.join('\n\n')}`})});
+    }
+    throw new Error(`Bug ${report.id}: comment reconciliation exceeded 1000 comments; manual review required`);
   }
   return async () => {
     if (running) return;
@@ -105,10 +131,11 @@ export function bugPublisher({rest, botId, config, log, request = fetch}) {
       if (report === null) return;
       reportId = report.id;
       const payload = bugIssue(report, config.publicOrigin);
-      async function acknowledge(target, id) {
-        await api(`/${report.id}`, {method: 'POST', body: JSON.stringify({target, id: String(id)})});
-        report.delivery[target] = String(id);
-        log('bug_delivery_stage', {reportId, target, id: String(id)});
+      async function acknowledge(target, id, through) {
+        await api(`/${report.id}`, {method: 'POST', body: JSON.stringify({target, id: String(id), ...(through === undefined ? {} : {through})})});
+        if (target === 'notes') report.delivery.notes_through = through;
+        else report.delivery[target] = String(id);
+        log('bug_delivery_stage', {reportId, target, id: String(id), ...(through === undefined ? {} : {through})});
       }
       if (!report.delivery.issue_number) {
         stage = 'github_issue';
@@ -123,6 +150,14 @@ export function bugPublisher({rest, botId, config, log, request = fetch}) {
           body: {content: `Reporter: ${reporter(report)}\n${text(report.message_untrusted)}\n${url}`, flags: MessageFlags.SuppressEmbeds, allowed_mentions: {parse: []}, nonce: `u${report.id}`, enforce_nonce: true}
         });
         await acknowledge('public_message_id', message.id);
+      }
+      if (report.notes !== undefined) {
+        if (!Array.isArray(report.notes) || !Number.isSafeInteger(report.delivery.notes_through)
+            || report.delivery.notes_through < 0 || report.delivery.notes_through > report.notes.length) throw new Error('Invalid bug note progress');
+        if (report.delivery.notes_through < report.notes.length) {
+          stage = 'github_details';
+          await acknowledge('notes', (await details(report)).id, report.delivery.note_batch.through);
+        }
       }
       log('bug_delivered', {reportId, issueNumber: report.delivery.issue_number});
     } catch (error) {
