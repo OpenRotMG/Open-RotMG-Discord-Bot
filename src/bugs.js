@@ -5,7 +5,7 @@ import { ChannelType, MessageFlags, PermissionFlagsBits, Routes, escapeMarkdown 
 export const PUBLIC_BUG_CHANNEL_ID = '1559759855621898313';
 const repository = 'OpenRotMG/Open-RotMG-Server';
 const repoPath = `repos/${repository}`;
-export const BUG_REPLY = 'Please run /bug <description> in game so we can add this to our backlog!';
+export const BUG_REPLY = 'Please use "Report bug" at the bottom of https://openrotmg.org/ so we can add this to our backlog!';
 
 export function bugConfig(env, gameOrigin, linkToken) {
   if (env.BUG_REPORTING === undefined) return null;
@@ -55,6 +55,8 @@ export function bugIssue(report, gameOrigin) {
   // Delivery can lag deployments; use the frozen report: https://github.com/OpenRotMG/Open-RotMG-Server/blob/dfa6f8584ba7a778e364141485149458b9778b5b/src/server/diagnostics.rs#L691
   const revision = report.diagnostics.versions?.server;
   if (revision != null && (typeof revision !== 'string' || revision.length !== 40 || /[^a-f0-9]/i.test(revision))) throw new Error('Invalid reported server commit');
+  const screenshot = `${gameOrigin}/api/bug-reports/${report.id}/screenshot.png`;
+  if (report.screenshot_url !== undefined && report.screenshot_url !== screenshot && report.screenshot_url !== `https://openrotmg.org/api/bug-reports/${report.id}/screenshot.png`) throw new Error('Unexpected screenshot attachment URL');
   const environment = report.diagnostics.environment;
   const browser = ['Chrome', 'Firefox', 'Edge', 'Safari'].includes(environment.browser) ? environment.browser : 'Unknown browser';
   const os = ['Windows', 'macOS', 'Linux', 'Android', 'iOS'].includes(environment.os) ? environment.os : 'unknown OS';
@@ -65,7 +67,8 @@ export function bugIssue(report, gameOrigin) {
     `**Environment:** ${browser} on ${os}  `,
     `**Server commit:** ${revision == null ? 'not recorded in report' : '`' + revision + '`'}  `,
     `**Reported:** ${new Date(report.created_at_unix_ms).toISOString()}`, '',
-    `Diagnostics: ${diagnostics}`
+    `Diagnostics: ${diagnostics}`,
+    ...(report.screenshot_url === undefined ? [] : ['', `![Game screenshot](${screenshot})`])
   ].join('\n')};
 }
 async function existingMessage(rest, botId, report, url) {

@@ -14,6 +14,18 @@ function fixture() {
     connection: {user_agent: 'PRIVATE_UA'}, diagnostics: {environment: {browser: 'Chrome', os: 'Linux'}, versions: {server: 'a'.repeat(40)}},
     diagnostics_url: `${origin}/api/bug-reports/${'a'.repeat(24)}/diagnostics.json`, delivery: {status: 'pending'}};
 }
+test('screenshots use the exact API report path; old reports remain deliverable', () => {
+  const report = fixture(), path = `/api/bug-reports/${report.id}/screenshot.png`;
+  for (const screenshot_url of [origin + path, 'https://openrotmg.org' + path]) {
+    assert.ok(bugIssue({...report, screenshot_url}, origin).body.endsWith(`![Game screenshot](${origin}${path})`));
+  }
+  assert.ok(!bugIssue(report, origin).body.includes('Game screenshot'));
+  for (const screenshot_url of ['http://169.254.169.254' + path, origin + '/api/bug-reports/other/screenshot.png', null]) {
+    assert.throws(() => bugIssue({...report, screenshot_url}, origin), /Unexpected screenshot/);
+  }
+  assert.ok(BUG_REPLY.includes('Report bug'));assert.ok(!BUG_REPLY.includes('/bug'));
+});
+
 test('!bug keeps exact guidance, no mentions/XP, and bounded cooldown', async () => {
   const sent = [], guildId = '1';
   const msg = {content: ' !bug ', guildId, author: {id: 'bug-test-user', bot: false}, reply: async data => sent.push(data)};
