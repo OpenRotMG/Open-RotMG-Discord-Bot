@@ -46,6 +46,9 @@ export function bugIssue(report, gameOrigin) {
   const title = bugTitle(report.message_untrusted);
   const diagnostics = `${gameOrigin}/api/bug-reports/${report.id}/diagnostics.json`;
   if (report.diagnostics_url !== diagnostics) throw new Error('Unexpected diagnostic attachment URL');
+  // Delivery can lag deployments; use the frozen report: https://github.com/OpenRotMG/Open-RotMG-Server/blob/dfa6f8584ba7a778e364141485149458b9778b5b/src/server/diagnostics.rs#L691
+  const revision = report.diagnostics.versions?.server;
+  if (revision != null && (typeof revision !== 'string' || revision.length !== 40 || /[^a-f0-9]/i.test(revision))) throw new Error('Invalid reported server commit');
   const environment = report.diagnostics.environment;
   const browser = ['Chrome', 'Firefox', 'Edge', 'Safari'].includes(environment.browser) ? environment.browser : 'Unknown browser';
   const os = ['Windows', 'macOS', 'Linux', 'Android', 'iOS'].includes(environment.os) ? environment.os : 'unknown OS';
@@ -54,6 +57,7 @@ export function bugIssue(report, gameOrigin) {
     `<!-- openrotmg-bug:${report.id} -->`, description, '',
     `**Reporter:** ${reporter(report)}  `,
     `**Environment:** ${browser} on ${os}  `,
+    `**Server commit:** ${revision == null ? 'not recorded in report' : '`' + revision + '`'}  `,
     `**Reported:** ${new Date(report.created_at_unix_ms).toISOString()}`, '',
     `Diagnostics: ${diagnostics}`
   ].join('\n')};

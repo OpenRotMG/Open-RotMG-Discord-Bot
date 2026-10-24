@@ -8,7 +8,7 @@ function fixture() {
   return {schema: 3, reporter_name: 'BugWizard', id: 'a'.repeat(24), created_at_unix_ms: Date.parse('2026-10-16T12:00:00Z'),
     message_untrusted: 'Enemies freeze, then catch up\nI can still move.', account_id: 123456,
     context: {player_id: 654321, world_name: 'PRIVATE_WORLD'},
-    connection: {user_agent: 'PRIVATE_UA'}, diagnostics: {environment: {browser: 'Chrome', os: 'Linux'}},
+    connection: {user_agent: 'PRIVATE_UA'}, diagnostics: {environment: {browser: 'Chrome', os: 'Linux'}, versions: {server: 'a'.repeat(40)}},
     diagnostics_url: `${origin}/api/bug-reports/${'a'.repeat(24)}/diagnostics.json`, delivery: {status: 'pending'}};
 }
 test('!bug keeps exact guidance, no mentions/XP, and bounded cooldown', async () => {
@@ -99,6 +99,29 @@ function harness() {
   const publish = bugPublisher({rest, botId: 'bot', config: {url: 'http://127.0.0.1:18923/internal/discord/bugs', publicOrigin: origin, token: 'game-secret', githubToken: 'github-secret'}, request, log: (...args) => logs.push(args)});
   return {report, posts, issues, comments, logs, receipts, messages, publish, fail: value => {failure = value;}};
 }
+test('issue preserves the full report-time server commit across a lost receipt', async () => {
+  const h = harness(), server = '0123456789abcdef'.repeat(2) + '01234567';
+  h.report.diagnostics.versions = {server, client: 'b'.repeat(40), website: 'c'.repeat(40)};
+  const original = structuredClone(h.report.diagnostics);
+  h.fail('issue_number'); await h.publish(); await h.publish();
+  assert.equal(h.issues.length, 1); assert.equal(h.posts.length, 1);
+  assert.ok(h.issues[0].body.includes(`**Server commit:** \`${server}\``));
+  for (const other of ['b'.repeat(40), 'c'.repeat(40)]) assert.ok(!h.issues[0].body.includes(other));
+  assert.deepEqual(h.report.diagnostics, original);
+});
+test('unrecorded commits are explicit, malformed recorded commits stop publication', async () => {
+  for (const versions of [undefined, {}, {server: null}]) {
+    const report = fixture(); report.diagnostics.versions = versions;
+    assert.match(bugIssue(report, origin).body, /\*\*Server commit:\*\* not recorded in report/);
+  }
+  const report = fixture(); report.diagnostics.versions.server = 'A'.repeat(40);
+  assert.ok(bugIssue(report, origin).body.includes('`' + 'A'.repeat(40) + '`'));
+  for (const server of ['', 'main', 'a'.repeat(39), 'a'.repeat(41), 'g'.repeat(40), 'a'.repeat(40) + '\n', '` @everyone', 42, {}, []]) {
+    const h = harness(); h.report.diagnostics.versions.server = server; await h.publish();
+    assert.equal(h.issues.length, 0); assert.equal(h.posts.length, 0); assert.equal(h.receipts.length, 0);
+    assert.ok(h.logs.some(([event, data]) => event === 'bug_delivery_failed' && data.error.message === 'Invalid reported server commit'));
+  }
+});
 function addNote(h, text) {
   if (!h.report.notes) {h.report.notes = []; h.report.delivery.notes_through = 0;}
   h.report.notes.push({created_at_unix_ms: h.report.created_at_unix_ms + h.report.notes.length + 1, text_untrusted: text});
