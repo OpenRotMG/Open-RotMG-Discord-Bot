@@ -1,9 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {PUBLIC_BUG_CHANNEL_ID, BUG_REPLY, bugConfig, bugPublisher, bugTitle, bugIssue, validateBugChannels} from '../src/bugs.js';
 import {handleMessage} from '../src/bot.js';
 import {ChannelType, MessageFlags, PermissionFlagsBits} from 'discord.js';
-const origin = 'https://openrotmg.org';
+const origin = 'https://game.openrotmg.org';
 function fixture() {
   return {schema: 3, reporter_name: 'BugWizard', id: 'a'.repeat(24), created_at_unix_ms: Date.parse('2026-10-16T12:00:00Z'),
     message_untrusted: 'Enemies freeze, then catch up\nI can still move.', account_id: 123456,
@@ -43,7 +46,7 @@ test('issue identifies the reporter without private account or telemetry data', 
   assert.ok(!bugIssue(report, origin).body.includes('@everyone'));
 });
 function harness() {
-  const report = fixture(), posts = [], issues = [], comments = [], logs = [], receipts = [], messages = [];
+  const report = fixture(), posts = [], issues = [], comments = [], logs = [], receipts = [], messages = [], attachments = [];
   let failure;
   const rest = {
     async get(route) {assert.equal(route, `/channels/${PUBLIC_BUG_CHANNEL_ID}/messages`); return messages;},
@@ -55,7 +58,12 @@ function harness() {
     }
   };
   const request = async (url, options) => {
-    if (url === report.diagnostics_url) {
+    if (url === `https://openrotmg.org/api/bug-reports/${report.id}/diagnostics.json`) {
+      attachments.push(url);
+      return new Response('', {status: 404});
+    }
+    if (url === `${origin}/api/bug-reports/${report.id}/diagnostics.json`) {
+      attachments.push(url);
       assert.ok(!options.headers?.authorization);
       if (failure === 'attachment') {failure = null; return new Response('', {status: 503});}
       return Response.json(report.diagnostics);
@@ -97,8 +105,21 @@ function harness() {
     return Response.json({report});
   };
   const publish = bugPublisher({rest, botId: 'bot', config: {url: 'http://127.0.0.1:18923/internal/discord/bugs', publicOrigin: origin, token: 'game-secret', githubToken: 'github-secret'}, request, log: (...args) => logs.push(args)});
-  return {report, posts, issues, comments, logs, receipts, messages, publish, fail: value => {failure = value;}};
+  return {report, posts, issues, comments, logs, receipts, messages, attachments, publish, fail: value => {failure = value;}};
 }
+test('queued website-origin reports publish through the backend once without changing the frozen report', async () => {
+  const h = harness();
+  h.report.diagnostics_url = `https://openrotmg.org/api/bug-reports/${h.report.id}/diagnostics.json`;
+  const original = structuredClone(h.report);
+  h.fail('issue_number');
+  await h.publish(); await h.publish(); await h.publish();
+  assert.equal(h.issues.length, 1); assert.equal(h.posts.length, 1); assert.equal(h.receipts.length, 2);
+  assert.ok(h.issues[0].body.endsWith(`${origin}/api/bug-reports/${h.report.id}/diagnostics.json`));
+  assert.deepEqual(h.attachments, Array(2).fill(`${origin}/api/bug-reports/${h.report.id}/diagnostics.json`));
+  assert.equal(h.report.diagnostics_url, original.diagnostics_url);
+  assert.deepEqual(h.report.diagnostics, original.diagnostics);
+  assert.ok(h.logs.some(([event]) => event === 'bug_diagnostic_route_migrated'));
+});
 test('issue preserves the full report-time server commit across a lost receipt', async () => {
   const h = harness(), server = '0123456789abcdef'.repeat(2) + '01234567';
   h.report.diagnostics.versions = {server, client: 'b'.repeat(40), website: 'c'.repeat(40)};
@@ -211,7 +232,12 @@ test('invalid note batch bounds fail explicitly without acknowledging details', 
   assert.equal(h.comments.length, 0); assert.equal(h.report.delivery.notes_through, 0);
   assert.ok(h.logs.some(([event]) => event === 'bug_delivery_failed'));
 });
-test('configuration and required notification permissions fail explicitly', async () => {
+test('configuration and required notification permissions fail explicitly', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'rotmg-bug-config-'));
+  t.after(() => rmSync(dir, {recursive: true}));
+  const credential = join(dir, 'credential');
+  writeFileSync(credential, 'test-github-token');
+  assert.equal(bugConfig({BUG_REPORTING: '1', GITHUB_BUG_TOKEN_FILE: credential}, 'http://127.0.0.1:18923', 'test-api-token').publicOrigin, origin);
   assert.equal(bugConfig({}, '', ''), null); assert.throws(() => bugConfig({BUG_REPORTING: 'false'}, '', ''));
   assert.throws(() => bugConfig({BUG_REPORTING: '1'}, '', ''));
   const client = {user: {id: 'bot'}, channels: {fetch: async () => ({guildId: 'guild', type: ChannelType.GuildText, permissionsFor: () => ({has: flag => flag !== PermissionFlagsBits.SendMessages})})}};
