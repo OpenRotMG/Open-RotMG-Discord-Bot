@@ -1,5 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {PUBLIC_BUG_CHANNEL_ID, BUG_REPLY, bugConfig, bugPublisher, bugTitle, bugIssue, validateBugChannels} from '../src/bugs.js';
 import {handleMessage} from '../src/bot.js';
 import {ChannelType, MessageFlags, PermissionFlagsBits} from 'discord.js';
@@ -42,8 +45,8 @@ test('issue identifies the reporter without private account or telemetry data', 
   report.diagnostics_url = fixture().diagnostics_url; report.message_untrusted = '@everyone <script> #1';
   assert.ok(!bugIssue(report, origin).body.includes('@everyone'));
 });
-function harness() {
-  const report = fixture(), posts = [], issues = [], comments = [], logs = [], receipts = [], messages = [];
+function harness(publicOrigin = origin) {
+  const report = fixture(), posts = [], issues = [], comments = [], logs = [], receipts = [], messages = [], attachments = [];
   let failure;
   const rest = {
     async get(route) {assert.equal(route, `/channels/${PUBLIC_BUG_CHANNEL_ID}/messages`); return messages;},
@@ -55,7 +58,8 @@ function harness() {
     }
   };
   const request = async (url, options) => {
-    if (url === report.diagnostics_url) {
+    if (url === `${publicOrigin}/api/bug-reports/${report.id}/diagnostics.json`) {
+      attachments.push(url);
       assert.ok(!options.headers?.authorization);
       if (failure === 'attachment') {failure = null; return new Response('', {status: 503});}
       return Response.json(report.diagnostics);
@@ -96,8 +100,8 @@ function harness() {
     }
     return Response.json({report});
   };
-  const publish = bugPublisher({rest, botId: 'bot', config: {url: 'http://127.0.0.1:18923/internal/discord/bugs', publicOrigin: origin, token: 'game-secret', githubToken: 'github-secret'}, request, log: (...args) => logs.push(args)});
-  return {report, posts, issues, comments, logs, receipts, messages, publish, fail: value => {failure = value;}};
+  const publish = bugPublisher({rest, botId: 'bot', config: {url: 'http://127.0.0.1:18923/internal/discord/bugs', publicOrigin, token: 'game-secret', githubToken: 'github-secret'}, request, log: (...args) => logs.push(args)});
+  return {report, posts, issues, comments, logs, receipts, messages, attachments, publish, fail: value => {failure = value;}};
 }
 test('issue preserves the full report-time server commit across a lost receipt', async () => {
   const h = harness(), server = '0123456789abcdef'.repeat(2) + '01234567';
@@ -120,6 +124,34 @@ test('unrecorded commits are explicit, malformed recorded commits stop publicati
     const h = harness(); h.report.diagnostics.versions.server = server; await h.publish();
     assert.equal(h.issues.length, 0); assert.equal(h.posts.length, 0); assert.equal(h.receipts.length, 0);
     assert.ok(h.logs.some(([event, data]) => event === 'bug_delivery_failed' && data.error.message === 'Invalid reported server commit'));
+  }
+});
+test('public diagnostics use Game while private queue access stays loopback', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'bug-origin-'));
+  t.after(() => rmSync(dir, {recursive: true}));
+  const credential = join(dir, 'github'); writeFileSync(credential, 'fixture-secret', {mode: 0o600});
+  const config = bugConfig({BUG_REPORTING: '1', GITHUB_BUG_TOKEN_FILE: credential}, 'http://127.0.0.1:18923', 'game-secret');
+  assert.equal(config.url, 'http://127.0.0.1:18923/internal/discord/bugs');
+  assert.equal(config.publicOrigin, 'https://game.openrotmg.org');
+});
+test('new Game and saved apex attachments publish from one canonical origin without rewriting reports', async () => {
+  const game = 'https://game.openrotmg.org';
+  for (const savedOrigin of [origin, game]) {
+    const h = harness(game), canonical = `${game}/api/bug-reports/${h.report.id}/diagnostics.json`;
+    h.report.diagnostics_url = `${savedOrigin}/api/bug-reports/${h.report.id}/diagnostics.json`;
+    const saved = structuredClone(h.report);
+    await h.publish(); await h.publish();
+    assert.equal(h.issues.length, 1); assert.equal(h.posts.length, 1);
+    assert.ok(h.issues[0].body.endsWith(canonical));
+    assert.deepEqual(h.attachments, [canonical]);
+    assert.equal(h.report.diagnostics_url, saved.diagnostics_url);
+    assert.deepEqual(h.report.diagnostics, saved.diagnostics);
+    assert.deepEqual(h.receipts.map(r => r.target), ['issue_number', 'public_message_id']);
+  }
+  for (const url of [`${origin}/api/bug-reports/${'b'.repeat(24)}/diagnostics.json`, 'https://evil.test/diagnostics.json']) {
+    const h = harness(game); h.report.diagnostics_url = url; await h.publish();
+    assert.equal(h.issues.length, 0); assert.equal(h.attachments.length, 0);
+    assert.ok(h.logs.some(([event, data]) => event === 'bug_delivery_failed' && data.error.message === 'Unexpected diagnostic attachment URL'));
   }
 });
 function addNote(h, text) {
