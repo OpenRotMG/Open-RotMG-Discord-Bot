@@ -13,7 +13,7 @@ export function bugConfig(env, gameOrigin, linkToken) {
   if (!env.GITHUB_BUG_TOKEN_FILE || !isAbsolute(env.GITHUB_BUG_TOKEN_FILE)) throw new Error('GITHUB_BUG_TOKEN_FILE must be absolute');
   const githubToken = readFileSync(env.GITHUB_BUG_TOKEN_FILE, 'utf8').trim();
   if (!githubToken) throw new Error('GitHub bug credential is empty');
-  return {url: `${gameOrigin}/internal/discord/bugs`, publicOrigin: 'https://openrotmg.org', token: linkToken, githubToken};
+  return {url: `${gameOrigin}/internal/discord/bugs`, publicOrigin: 'https://game.openrotmg.org', token: linkToken, githubToken};
 }
 
 export async function validateBugChannels(client, guildId) {
@@ -41,11 +41,17 @@ function reporter(report) {
   if (typeof name !== 'string' || !name.trim() || name.length > 64 || /[\r\n]/.test(name)) throw new Error('Invalid bug reporter name');
   return text(name);
 }
+function diagnosticUrl(report, gameOrigin) {
+  const path = `/api/bug-reports/${report.id}/diagnostics.json`;
+  const canonical = gameOrigin + path;
+  // Captured reports retain their website-origin URL; only delivery moves to the API origin.
+  if (report.diagnostics_url !== canonical && report.diagnostics_url !== `https://openrotmg.org${path}`) throw new Error('Unexpected diagnostic attachment URL');
+  return canonical;
+}
 export function bugIssue(report, gameOrigin) {
   if (![2, 3].includes(report.schema) || !/^[a-f0-9]{24}$/.test(report.id) || !Number.isSafeInteger(report.created_at_unix_ms)) throw new Error('Invalid bug report identity/schema');
   const title = bugTitle(report.message_untrusted);
-  const diagnostics = `${gameOrigin}/api/bug-reports/${report.id}/diagnostics.json`;
-  if (report.diagnostics_url !== diagnostics) throw new Error('Unexpected diagnostic attachment URL');
+  const diagnostics = diagnosticUrl(report, gameOrigin);
   // Delivery can lag deployments; use the frozen report: https://github.com/OpenRotMG/Open-RotMG-Server/blob/dfa6f8584ba7a778e364141485149458b9778b5b/src/server/diagnostics.rs#L691
   const revision = report.diagnostics.versions?.server;
   if (revision != null && (typeof revision !== 'string' || revision.length !== 40 || /[^a-f0-9]/i.test(revision))) throw new Error('Invalid reported server commit');
@@ -143,7 +149,7 @@ export function bugPublisher({rest, botId, config, log, request = fetch}) {
       }
       if (!report.delivery.issue_number) {
         stage = 'github_issue';
-        const attachment = await request(report.diagnostics_url, {redirect: 'error', signal: AbortSignal.timeout(10000)});
+        const attachment = await request(diagnosticUrl(report, config.publicOrigin), {redirect: 'error', signal: AbortSignal.timeout(10000)});
         if (!attachment.ok) throw new Error(`Diagnostic attachment returned HTTP ${attachment.status}`);
         await acknowledge('issue_number', (await issue(report, payload)).number);
       }
