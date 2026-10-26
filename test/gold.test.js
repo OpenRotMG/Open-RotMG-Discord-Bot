@@ -13,6 +13,7 @@ function command(extra = {}) {
     isChatInputCommand: () => true,
     memberPermissions: new PermissionsBitField(PermissionFlagsBits.Administrator),
     options: {getUser: () => ({id: target}), getInteger: () => 100},
+    followUp: async () => assert.fail('Unconfirmed or rejected grants must not be announced'),
     ...extra};
 }
 
@@ -38,18 +39,34 @@ test('/gold denies non-admins, DMs and foreign guilds before reading options or 
   }
 });
 
-test('/gold credits the selected user, sends actor and interaction ID, and replies privately without pings', async () => {
-  const calls = [], replies = [];
+test('/gold confirms privately then announces the giver, recipient and amount publicly, mentioning only the recipient', async () => {
+  const calls = [], replies = [], announcements = [];
   const goldGame = async (...args) => {calls.push(args); return {balance: 150};};
   await handleInteraction(command({
     deferReply: async p => {assert.deepEqual(p, {flags: 64});},
     editReply: async p => replies.push(p),
+    followUp: async p => {assert.equal(replies.length, 1); announcements.push(p);},
   }), {guildId, goldGame});
   assert.deepEqual(calls, [[target, 100, request, actor]]);
   assert.match(replies[0].content, /Added 100 gold/);
   assert.match(replies[0].content, new RegExp(target));
   assert.match(replies[0].content, /Balance: 150 gold/);
   assert.deepEqual(replies[0].allowedMentions, {parse: []});
+  assert.deepEqual(announcements, [{content: `<@${actor}> gave <@${target}> 100 gold! 🪙`, flags: 0, allowedMentions: {parse: [], users: [target]}}]);
+});
+
+test('/gold announcement failure does not retry the grant or report its confirmed credit as a failure', async () => {
+  const replies = [];
+  let grants = 0;
+  await handleInteraction(command({
+    deferReply: async p => assert.deepEqual(p, {flags: 64}),
+    editReply: async p => replies.push(p),
+    followUp: async () => {throw new Error('Missing Send Messages permission');},
+  }), {guildId, goldGame: async () => {grants++; return {balance: 100};}});
+  assert.equal(grants, 1);
+  assert.match(replies.at(-1).content, /100 gold was credited/);
+  assert.match(replies.at(-1).content, /Missing Send Messages permission/);
+  assert.match(replies.at(-1).content, /Do not repeat/);
 });
 
 test('/gold rejects invalid amounts and never fabricates success for unlinked users, outages or malformed receipts', async () => {
