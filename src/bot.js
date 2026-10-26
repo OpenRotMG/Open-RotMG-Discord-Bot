@@ -1,3 +1,4 @@
+import { PermissionFlagsBits } from 'discord.js';
 import { buildLevel, jumpModal } from './levels.js';
 import { COMMANDS, formatUptime } from './commands.js';
 import { BUG_REPLY } from './bugs.js';
@@ -31,7 +32,7 @@ export async function replyInteractionError(interaction) {
   else if (!interaction.replied) await interaction.reply({...payload, flags: 64});
 }
 
-export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, linkStatus, unlinkGame, kickGame, recoverGame, announceRoleId, announceGame}) {
+export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, linkStatus, unlinkGame, kickGame, recoverGame, goldGame, announceRoleId, announceGame}) {
   if (interaction.guildId !== guildId) {
     await interaction.reply({content: 'This bot is configured for the Open RotMG server only.', flags: 64});
     return;
@@ -77,6 +78,26 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         }
       } catch (error) {
         await interaction.editReply({content: `${kick ? 'Disconnect' : 'Recovery'} could not be confirmed: ${error.message}`, allowedMentions: {parse: []}});
+      }
+    } else if (interaction.commandName === 'gold') {
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        await interaction.reply({content: 'Giving gold requires Administrator permission.', flags: 64});
+        return;
+      }
+      if (!goldGame) throw new Error('Gold API is not configured');
+      const target = interaction.options.getUser('user', true);
+      const amount = interaction.options.getInteger('amount', true);
+      if (!Number.isSafeInteger(amount) || amount < 1 || amount > 2147483647) {
+        await interaction.reply({content: 'Gold amount must be a whole number from 1 to 2147483647.', flags: 64});
+        return;
+      }
+      await interaction.deferReply({flags: 64});
+      try {
+        const result = await goldGame(target.id, amount, interaction.id, userId);
+        if (!Number.isSafeInteger(result.balance) || result.balance < amount || result.balance > 2147483647) throw new Error('Invalid gold response');
+        await interaction.editReply({content: `Added ${amount} gold to <@${target.id}>'s linked game account. Balance: ${result.balance} gold.`, allowedMentions: {parse: []}});
+      } catch (error) {
+        await interaction.editReply({content: `Gold grant could not be confirmed: ${error.message}. It may already have been credited; check the linked account's balance before issuing another /gold command.`, allowedMentions: {parse: []}});
       }
     } else if (interaction.commandName === 'announce') {
       if (!interaction.member?.roles?.cache?.has(announceRoleId)) {
