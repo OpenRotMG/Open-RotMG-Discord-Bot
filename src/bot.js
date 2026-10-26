@@ -98,6 +98,12 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         await interaction.editReply({content: `Added ${amount} gold to <@${target.id}>'s linked game account. Balance: ${result.balance} gold.`, allowedMentions: {parse: []}});
       } catch (error) {
         await interaction.editReply({content: `Gold grant could not be confirmed: ${error.message}. It may already have been credited; check the linked account's balance before issuing another /gold command.`, allowedMentions: {parse: []}});
+        return;
+      }
+      try {
+        await interaction.followUp({content: `<@${userId}> gave <@${target.id}> ${amount} gold! 🪙`, flags: 0, allowedMentions: {parse: [], users: [target.id]}});
+      } catch (error) {
+        await interaction.editReply({content: `The ${amount} gold was credited, but the public announcement could not be confirmed: ${error.message}. Do not repeat /gold for this grant.`, allowedMentions: {parse: []}});
       }
     } else if (interaction.commandName === 'announce') {
       if (!interaction.member?.roles?.cache?.has(announceRoleId)) {
