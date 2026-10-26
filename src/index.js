@@ -37,6 +37,7 @@ const store = openStore(databasePath);
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]});
 const context = {store, guildId, announceRoleId,
   announceGame: text => gameJson(`${gameOrigin}/internal/discord/announce`, {body: {text}, token: linkToken, timeout: 20000}),
+  goldGame: (discord_id, amount, request_id, actor_id) => gameJson(`${gameOrigin}/internal/discord/gold`, {body: {discord_id, amount, request_id, actor_id}, token: linkToken}),
   kickGame: discord_id => gameJson(`${gameOrigin}/internal/discord/kick`, {body: {discord_id}, token: linkToken, timeout: 20000}),
   recoverGame: (code, discord_id) => gameJson(`${gameOrigin}/internal/discord/recover`, {body: {discord_id, ...(code ? {code} : {})}, token: linkToken}),
   linkGame: discord_id => gameJson(`${gameOrigin}/internal/discord/link/start`, {body: {discord_id}, token: linkToken}),
