@@ -97,7 +97,7 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         if (!Number.isSafeInteger(result.balance) || result.balance < amount || result.balance > 2147483647) throw new Error('Invalid gold response');
         await interaction.editReply({content: `Added ${amount} gold to <@${target.id}>'s linked game account. Balance: ${result.balance} gold.`, allowedMentions: {parse: []}});
       } catch (error) {
-        await interaction.editReply({content: `Gold grant could not be confirmed: ${error.message}. It may already have been credited; check the linked account's balance before issuing another /give-gold command.`, allowedMentions: {parse: []}});
+        await interaction.editReply({content: `Gold grant to <@${target.id}> could not be confirmed: ${error.message}. It may already have been credited; check the linked account's balance before issuing another /give-gold command.`, allowedMentions: {parse: []}});
         return;
       }
       try {
@@ -118,11 +118,11 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         if (!Number.isSafeInteger(result.tokens) || result.tokens < 1) throw new Error('Invalid Realm Close response');
         await interaction.editReply({content: `Gave <@${target.id}> a Realm Close token. They now have ${result.tokens}.`, allowedMentions: {parse: []}});
       } catch (error) {
-        await interaction.editReply({content: `Realm Close token grant could not be confirmed: ${error.message}`, allowedMentions: {parse: []}});
+        await interaction.editReply({content: `Could not give <@${target.id}> a Realm Close token: ${error.message}`, allowedMentions: {parse: []}});
         return;
       }
       try {
-        await interaction.followUp({content: `<@${target.id}> <@${userId}> gave you a Realm Close token! While in a realm, \`/close-realm\` on Discord to activate it.`, flags: 0, allowedMentions: {parse: [], users: [target.id]}});
+        await interaction.followUp({content: `<@${target.id}> - <@${userId}> gave you a Realm Close token! While in a realm, \`/close-realm\` on Discord to activate it.`, flags: 0, allowedMentions: {parse: [], users: [target.id]}});
       } catch (error) {
         await interaction.editReply({content: `The Realm Close token was given, but the public announcement could not be confirmed: ${error.message}. Do not repeat /give-close-realm for this grant.`, allowedMentions: {parse: []}});
       }
