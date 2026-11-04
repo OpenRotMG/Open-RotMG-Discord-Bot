@@ -29,7 +29,12 @@ test('/give-close-realm is Administrator-only and announces the token to the rec
   await handleInteraction(given.interaction, {guildId, realmCloseGame: async (...args) => {calls.push(args); return {tokens: 2};}});
   assert.deepEqual(calls, [[target, request, actor]]);
   assert.match(given.replies[0].content, /They now have 2/);
-  assert.deepEqual(given.announcements, [{content: `<@${target}> <@${actor}> gave you a Realm Close token! While in a realm, \`/close-realm\` on Discord to activate it.`, flags: 0, allowedMentions: {parse: [], users: [target]}}]);
+  const unlinked = command('give-close-realm');
+  await handleInteraction(unlinked.interaction, {guildId, realmCloseGame: async () => {throw new Error('target user has no linked registered game account; they must use /link first');}});
+  assert.equal(unlinked.replies[0].content, `Could not give <@${target}> a Realm Close token: target user has no linked registered game account; they must use /link first`);
+  assert.deepEqual(unlinked.replies[0].allowedMentions, {parse: []});
+  assert.deepEqual(unlinked.announcements, []);
+  assert.deepEqual(given.announcements, [{content: `<@${target}> - <@${actor}> gave you a Realm Close token! While in a realm, \`/close-realm\` on Discord to activate it.`, flags: 0, allowedMentions: {parse: [], users: [target]}}]);
 });
 
 test('/close-realm announces a started closure and reports refusals privately without announcing', async () => {
