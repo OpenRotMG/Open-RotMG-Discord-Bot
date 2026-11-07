@@ -110,20 +110,13 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         await interaction.reply({content: 'Cancelling a restart requires the Moderator role or Administrator permission.', flags: 64});
         return;
       }
-      if (!cancelRestartGame || !announceGame) throw new Error('Restart API is not configured');
+      if (!cancelRestartGame) throw new Error('Restart API is not configured');
       await interaction.deferReply({flags: 64});
       try {
         const result = await cancelRestartGame(userId);
         if (result?.state !== 'cancelled') throw new Error('Invalid restart response');
       } catch (error) {
         await interaction.editReply({content: `Restart cancellation could not be confirmed: ${error.message}`, allowedMentions: {parse: []}});
-        return;
-      }
-      try {
-        const notice = await announceGame('Server update restart cancelled. This countdown will not restart the server.');
-        if (!Number.isSafeInteger(notice?.players) || notice.players < 0) throw new Error('Invalid announcement response');
-      } catch (error) {
-        await interaction.editReply({content: `Server update restart cancelled, but the in-game notice could not be confirmed: ${error.message}. This update will not be deployed.`, allowedMentions: {parse: []}});
         return;
       }
       await interaction.editReply({content: 'Server update restart cancelled. This update will not be deployed.', allowedMentions: {parse: []}});

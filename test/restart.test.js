@@ -51,20 +51,11 @@ test('/cancel-restart never reports success for missing, expired, consumed or un
   await assert.rejects(handleInteraction(command(), {guildId, announceRoleId}), /Restart API is not configured/);
 });
 
-test('/cancel-restart keeps acknowledged cancellation when its announcement fails', async () => {
-  const replies = [];
-  let calls = 0;
-  await handleInteraction(command({deferReply: async () => {}, editReply: async p => replies.push(p)}),
-    {guildId, announceRoleId, cancelRestartGame: async () => {calls++; return {state: 'cancelled'};}, announceGame: async () => {throw new Error('notice unavailable');}});
-  assert.equal(calls, 1);
-  assert.match(replies[0].content, /restart cancelled, but.*notice unavailable/);
-});
-
-test('/cancel-restart does not retry or mislabel a failed Discord reply after a confirmed notice', async () => {
-  let replies = 0, cancellations = 0, notices = 0;
+test('/cancel-restart does not repeat cancellation if its Discord reply fails', async () => {
+  let replies = 0, cancellations = 0;
   await assert.rejects(handleInteraction(command({deferReply: async () => {}, editReply: async () => {replies++; throw new Error('Discord reply unavailable');}}),
-    {guildId, announceRoleId, cancelRestartGame: async () => {cancellations++; return {state: 'cancelled'};}, announceGame: async () => {notices++; return {players: 2};}}), /Discord reply unavailable/);
-  assert.deepEqual([replies, cancellations, notices], [1, 1, 1]);
+    {guildId, announceRoleId, cancelRestartGame: async () => {cancellations++; return {state: 'cancelled'};}}), /Discord reply unavailable/);
+  assert.deepEqual([replies, cancellations], [1, 1]);
 });
 
 test('production command and transport bind the exact server receipt with mock authentication', async t => {
