@@ -32,7 +32,7 @@ export async function replyInteractionError(interaction) {
   else if (!interaction.replied) await interaction.reply({...payload, flags: 64});
 }
 
-export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, linkStatus, unlinkGame, kickGame, recoverGame, goldGame, announceRoleId, announceGame, cancelRestartGame}) {
+export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, linkStatus, unlinkGame, kickGame, recoverGame, goldGame, realmCloseGame, closeRealmGame, announceRoleId, announceGame, cancelRestartGame}) {
   if (interaction.guildId !== guildId) {
     await interaction.reply({content: 'This bot is configured for the Open RotMG server only.', flags: 64});
     return;
@@ -79,7 +79,7 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
       } catch (error) {
         await interaction.editReply({content: `${kick ? 'Disconnect' : 'Recovery'} could not be confirmed: ${error.message}`, allowedMentions: {parse: []}});
       }
-    } else if (interaction.commandName === 'gold') {
+    } else if (interaction.commandName === 'give-gold') {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         await interaction.reply({content: 'Giving gold requires Administrator permission.', flags: 64});
         return;
@@ -97,13 +97,13 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         if (!Number.isSafeInteger(result.balance) || result.balance < amount || result.balance > 2147483647) throw new Error('Invalid gold response');
         await interaction.editReply({content: `Added ${amount} gold to <@${target.id}>'s linked game account. Balance: ${result.balance} gold.`, allowedMentions: {parse: []}});
       } catch (error) {
-        await interaction.editReply({content: `Gold grant could not be confirmed: ${error.message}. It may already have been credited; check the linked account's balance before issuing another /gold command.`, allowedMentions: {parse: []}});
+        await interaction.editReply({content: `Gold grant to <@${target.id}> could not be confirmed: ${error.message}. It may already have been credited; check the linked account's balance before issuing another /give-gold command.`, allowedMentions: {parse: []}});
         return;
       }
       try {
         await interaction.followUp({content: `<@${userId}> gave <@${target.id}> ${amount} gold! 🪙`, flags: 0, allowedMentions: {parse: [], users: [target.id]}});
       } catch (error) {
-        await interaction.editReply({content: `The ${amount} gold was credited, but the public announcement could not be confirmed: ${error.message}. Do not repeat /gold for this grant.`, allowedMentions: {parse: []}});
+        await interaction.editReply({content: `The ${amount} gold was credited, but the public announcement could not be confirmed: ${error.message}. Do not repeat /give-gold for this grant.`, allowedMentions: {parse: []}});
       }
     } else if (interaction.commandName === 'cancel-restart') {
       if (!interaction.member?.roles?.cache?.has(announceRoleId) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
@@ -127,6 +127,39 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
         return;
       }
       await interaction.editReply({content: 'Server update restart cancelled. This update will not be deployed.', allowedMentions: {parse: []}});
+    } else if (interaction.commandName === 'give-close-realm') {
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        await interaction.reply({content: 'Giving Realm Close tokens requires Administrator permission.', flags: 64});
+        return;
+      }
+      if (!realmCloseGame) throw new Error('Realm Close API is not configured');
+      const target = interaction.options.getUser('user', true);
+      await interaction.deferReply({flags: 64});
+      try {
+        const result = await realmCloseGame(target.id, interaction.id, userId);
+        if (!Number.isSafeInteger(result.tokens) || result.tokens < 1) throw new Error('Invalid Realm Close response');
+        await interaction.editReply({content: `Gave <@${target.id}> a Realm Close token. They now have ${result.tokens}.`, allowedMentions: {parse: []}});
+      } catch (error) {
+        await interaction.editReply({content: `Could not give <@${target.id}> a Realm Close token: ${error.message}`, allowedMentions: {parse: []}});
+        return;
+      }
+      try {
+        await interaction.followUp({content: `<@${target.id}> - <@${userId}> gave you a Realm Close token! While in a realm, \`/close-realm\` on Discord to activate it.`, flags: 0, allowedMentions: {parse: [], users: [target.id]}});
+      } catch (error) {
+        await interaction.editReply({content: `The Realm Close token was given, but the public announcement could not be confirmed: ${error.message}. Do not repeat /give-close-realm for this grant.`, allowedMentions: {parse: []}});
+      }
+    } else if (interaction.commandName === 'close-realm') {
+      if (!closeRealmGame) throw new Error('Realm Close API is not configured');
+      await interaction.deferReply({flags: 64});
+      try {
+        const result = await closeRealmGame(userId, interaction.id);
+        if (typeof result.name !== 'string' || !result.name) throw new Error('Invalid Realm Close response');
+        await interaction.editReply({content: `Your Realm Close token was used. Oryx is closing ${result.name}'s Realm.`, allowedMentions: {parse: []}});
+      } catch (error) {
+        await interaction.editReply({content: `Realm was not closed: ${error.message}`, allowedMentions: {parse: []}});
+        return;
+      }
+      await interaction.followUp({content: `<@${userId}> used a Realm Close token! Oryx is closing their Realm. 🏰`, flags: 0, allowedMentions: {parse: []}});
     } else if (interaction.commandName === 'announce') {
       if (!interaction.member?.roles?.cache?.has(announceRoleId)) {
         await interaction.reply({content: 'Announcing requires the Moderator role.', flags: 64});

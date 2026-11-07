@@ -7,7 +7,9 @@ export const COMMANDS = [
   {name: 'unlink', description: 'Unlink your game account and disable Discord password recovery', type: 1},
   {name: 'announce', description: 'Announce a message to everyone online in the game', type: 1, options: [{name: 'text', description: 'Message shown in game, up to 200 characters', type: 3, required: true, max_length: 200}]},
   {name: 'cancel-restart', description: 'Cancel the pending update restart (Moderator or Administrator only)', type: 1},
-  {name: 'gold', description: 'Give gold to a Discord user’s linked game account (Administrator only)', type: 1, default_member_permissions: '8', options: [{name: 'user', description: 'Discord user whose linked game account receives the gold', type: 6, required: true}, {name: 'amount', description: 'Gold to add', type: 4, required: true, min_value: 1, max_value: 2147483647}]},
+  {name: 'give-gold', description: 'Give gold to a Discord user’s linked game account (Administrator only)', type: 1, default_member_permissions: '8', options: [{name: 'user', description: 'Discord user whose linked game account receives the gold', type: 6, required: true}, {name: 'amount', description: 'Gold to add', type: 4, required: true, min_value: 1, max_value: 2147483647}]},
+  {name: 'give-close-realm', description: 'Give a Discord user a Realm Close token (Administrator only)', type: 1, default_member_permissions: '8', options: [{name: 'user', description: 'Discord user whose linked game account receives the token', type: 6, required: true}]},
+  {name: 'close-realm', description: 'Use a Realm Close token to close the Realm you are in', type: 1},
   {name: 'kick', description: 'Save and disconnect your own linked game account', type: 1},
   {name: 'recover', description: 'Privately reset your linked game account password', type: 1, options: [{name: 'code', description: 'Legacy code from /discord recovery in game', type: 3, required: false, min_length: 32, max_length: 32}]},
 ];

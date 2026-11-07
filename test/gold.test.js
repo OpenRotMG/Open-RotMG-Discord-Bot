@@ -9,7 +9,7 @@ const target = '1558662335076376579';
 const actor = '1558662335076376580';
 const request = '1558662335076376581';
 function command(extra = {}) {
-  return {guildId, user: {id: actor}, id: request, commandName: 'gold',
+  return {guildId, user: {id: actor}, id: request, commandName: 'give-gold',
     isChatInputCommand: () => true,
     memberPermissions: new PermissionsBitField(PermissionFlagsBits.Administrator),
     options: {getUser: () => ({id: target}), getInteger: () => 100},
@@ -17,15 +17,15 @@ function command(extra = {}) {
     ...extra};
 }
 
-test('/gold registration requires Administrator and bounded required user/amount options', () => {
-  const gold = COMMANDS.find(c => c.name === 'gold');
+test('/give-gold registration requires Administrator and bounded required user/amount options', () => {
+  const gold = COMMANDS.find(c => c.name === 'give-gold');
   assert.equal(gold.default_member_permissions, String(PermissionFlagsBits.Administrator));
   assert.deepEqual(gold.options.map(o => [o.name, o.type, o.required]), [['user', 6, true], ['amount', 4, true]]);
   assert.equal(gold.options[1].min_value, 1);
   assert.equal(gold.options[1].max_value, 2147483647);
 });
 
-test('/gold denies non-admins, DMs and foreign guilds before reading options or contacting game', async () => {
+test('/give-gold denies non-admins, DMs and foreign guilds before reading options or contacting game', async () => {
   const replies = [];
   const forbidden = {options: {getUser() {throw new Error('Read denied options');}}, reply: async p => replies.push(p)};
   for (const memberPermissions of [undefined, null, new PermissionsBitField(), new PermissionsBitField(PermissionFlagsBits.ManageGuild)]) {
@@ -39,7 +39,7 @@ test('/gold denies non-admins, DMs and foreign guilds before reading options or 
   }
 });
 
-test('/gold confirms privately then announces the giver, recipient and amount publicly, mentioning only the recipient', async () => {
+test('/give-gold confirms privately then announces the giver, recipient and amount publicly, mentioning only the recipient', async () => {
   const calls = [], replies = [], announcements = [];
   const goldGame = async (...args) => {calls.push(args); return {balance: 150};};
   await handleInteraction(command({
@@ -55,7 +55,7 @@ test('/gold confirms privately then announces the giver, recipient and amount pu
   assert.deepEqual(announcements, [{content: `<@${actor}> gave <@${target}> 100 gold! 🪙`, flags: 0, allowedMentions: {parse: [], users: [target]}}]);
 });
 
-test('/gold announcement failure does not retry the grant or report its confirmed credit as a failure', async () => {
+test('/give-gold announcement failure does not retry the grant or report its confirmed credit as a failure', async () => {
   const replies = [];
   let grants = 0;
   await handleInteraction(command({
@@ -69,7 +69,7 @@ test('/gold announcement failure does not retry the grant or report its confirme
   assert.match(replies.at(-1).content, /Do not repeat/);
 });
 
-test('/gold rejects invalid amounts and never fabricates success for unlinked users, outages or malformed receipts', async () => {
+test('/give-gold rejects invalid amounts and never fabricates success for unlinked users, outages or malformed receipts', async () => {
   const replies = [];
   const reply = async p => replies.push(p);
   for (const amount of [0, -1, 1.5, NaN, 2147483648]) {
