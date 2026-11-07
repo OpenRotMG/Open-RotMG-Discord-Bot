@@ -32,7 +32,7 @@ export async function replyInteractionError(interaction) {
   else if (!interaction.replied) await interaction.reply({...payload, flags: 64});
 }
 
-export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, linkStatus, unlinkGame, kickGame, recoverGame, goldGame, realmCloseGame, closeRealmGame, announceRoleId, announceGame}) {
+export async function handleInteraction(interaction, {store, guildId, gameStatus, linkGame, linkStatus, unlinkGame, kickGame, recoverGame, goldGame, realmCloseGame, closeRealmGame, announceRoleId, announceGame, cancelRestartGame}) {
   if (interaction.guildId !== guildId) {
     await interaction.reply({content: 'This bot is configured for the Open RotMG server only.', flags: 64});
     return;
@@ -105,6 +105,21 @@ export async function handleInteraction(interaction, {store, guildId, gameStatus
       } catch (error) {
         await interaction.editReply({content: `The ${amount} gold was credited, but the public announcement could not be confirmed: ${error.message}. Do not repeat /give-gold for this grant.`, allowedMentions: {parse: []}});
       }
+    } else if (interaction.commandName === 'cancel-restart') {
+      if (!interaction.member?.roles?.cache?.has(announceRoleId) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        await interaction.reply({content: 'Cancelling a restart requires the Moderator role or Administrator permission.', flags: 64});
+        return;
+      }
+      if (!cancelRestartGame) throw new Error('Restart API is not configured');
+      await interaction.deferReply({flags: 64});
+      try {
+        const result = await cancelRestartGame(userId);
+        if (result?.state !== 'cancelled') throw new Error('Invalid restart response');
+      } catch (error) {
+        await interaction.editReply({content: `Restart cancellation could not be confirmed: ${error.message}`, allowedMentions: {parse: []}});
+        return;
+      }
+      await interaction.editReply({content: 'Server update restart cancelled. This update will not be deployed.', allowedMentions: {parse: []}});
     } else if (interaction.commandName === 'give-close-realm') {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         await interaction.reply({content: 'Giving Realm Close tokens requires Administrator permission.', flags: 64});

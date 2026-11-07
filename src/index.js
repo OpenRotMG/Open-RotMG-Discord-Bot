@@ -10,6 +10,7 @@ import { reactionConfig, postReactor } from './reactions.js';
 import { bugConfig, bugPublisher, validateBugChannels } from './bugs.js';
 import {gameJson, setupBoards, refreshBoards} from './hiscores.js';
 import {syncUpdates} from './updates.js';
+import {cancelRestart} from './restart.js';
 
 process.umask(0o077);
 const {DISCORD_APPLICATION_ID: applicationId, DISCORD_GUILD_ID: guildId, DISCORD_BOT_TOKEN_FILE: tokenFile, DATABASE_PATH: databasePath} = process.env;
@@ -36,6 +37,7 @@ const site = 'https://openrotmg.org/';
 const store = openStore(databasePath);
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]});
 const context = {store, guildId, announceRoleId,
+  cancelRestartGame: actor => cancelRestart(gameOrigin, linkToken, actor),
   announceGame: text => gameJson(`${gameOrigin}/internal/discord/announce`, {body: {text}, token: linkToken, timeout: 20000}),
   goldGame: (discord_id, amount, request_id, actor_id) => gameJson(`${gameOrigin}/internal/discord/gold`, {body: {discord_id, amount, request_id, actor_id}, token: linkToken}),
   realmCloseGame: (discord_id, request_id, actor_id) => gameJson(`${gameOrigin}/internal/discord/realm-close/give`, {body: {discord_id, request_id, actor_id}, token: linkToken}),
