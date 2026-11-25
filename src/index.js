@@ -11,6 +11,7 @@ import { bugConfig, bugPublisher, validateBugChannels } from './bugs.js';
 import {gameJson, setupBoards, refreshBoards} from './hiscores.js';
 import {syncUpdates} from './updates.js';
 import {cancelRestart} from './restart.js';
+import {watchRealmTickChannel} from './realm-tick.js';
 
 process.umask(0o077);
 const {DISCORD_APPLICATION_ID: applicationId, DISCORD_GUILD_ID: guildId, DISCORD_BOT_TOKEN_FILE: tokenFile, DATABASE_PATH: databasePath} = process.env;
@@ -136,8 +137,11 @@ const publishBugs = bugs ? bugPublisher({rest: client.rest, botId: client.user.i
 const bugTimer = publishBugs ? setInterval(publishBugs, 5000) : null;
 if (publishBugs) void publishBugs();
 else log('bug_reporting_disabled', {reason: 'BUG_REPORTING is not set'});
+const stopRealmTick = process.env.REALM_TICK_CHANNEL_ID ? watchRealmTickChannel({rest: client.rest, guildId,
+  channelId: process.env.REALM_TICK_CHANNEL_ID, readHealth: () => gameJson(`${gameOrigin}/health`), log, error}) : null;
 const heartbeat = setInterval(() => log('heartbeat', {guildId, gatewayStatus: client.ws.status}), 60000);
 function stop(signal) {
+  stopRealmTick?.();
   log('stopping', {signal}); clearInterval(heartbeat); clearInterval(hiscoreTimer); clearInterval(updateTimer); clearInterval(bugTimer); clearInterval(alertTimer); client.destroy(); store.close();
 }
 process.once('SIGTERM', () => stop('SIGTERM'));
