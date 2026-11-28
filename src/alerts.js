@@ -58,7 +58,7 @@ export function serverAlerts({rest, channelId, guildId, healthUrl, incidentUrl, 
       try {
         if (incidentResult.status === 'rejected') throw new Error(`Critical incident feed unavailable (${incidentResult.reason.message})`);
         failure = incidentResult.value.incident;
-        if (failure !== null && (!/^\d+-\d+$/.test(failure?.id) || !['world','persistence'].includes(failure.component) || !['panicked','failed','exited'].includes(failure.failure)
+        if (failure !== null && (!/^\d+-\d+$/.test(failure?.id) || !/^[a-z_]{1,32}$/.test(failure.component) || !['panicked','failed','exited'].includes(failure.failure)
           || !Number.isSafeInteger(failure.unix_ms) || !(failure.revision === null || /^[a-f0-9]{40}$/.test(failure.revision))
           || !(failure.location === null || /^[A-Za-z0-9_./-]{1,180}:\d+:\d+$/.test(failure.location)))) throw new Error('Malformed critical incident response');
         if (failure) {
